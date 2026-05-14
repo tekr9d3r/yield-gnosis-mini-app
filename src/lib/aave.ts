@@ -58,11 +58,15 @@ export function encodeSupply(
 	});
 }
 
-export function encodeWithdraw(asset: `0x${string}`, to: `0x${string}`): `0x${string}` {
+export function encodeWithdraw(
+	asset: `0x${string}`,
+	to: `0x${string}`,
+	amount: bigint = maxUint256
+): `0x${string}` {
 	return encodeFunctionData({
 		abi: AAVE_POOL_ABI,
 		functionName: 'withdraw',
-		args: [asset, maxUint256, to]
+		args: [asset, amount, to]
 	});
 }
 

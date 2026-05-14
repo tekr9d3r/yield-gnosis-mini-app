@@ -2,13 +2,11 @@
 	import { slide } from 'svelte/transition';
 	import { onDestroy, onMount } from 'svelte';
 	import { formatUnits } from 'viem';
-	import { sendTransactions } from '@aboutcircles/miniapp-sdk';
-	import { encodeWithdraw } from '$lib/aave.js';
-	import { AAVE_POOL } from '$lib/chains.js';
 	import type { AssetInfo } from '$lib/types.js';
 	import TokenLogo from './TokenLogo.svelte';
 	import GrowthLine from './GrowthLine.svelte';
 	import InlineDeposit from './InlineDeposit.svelte';
+	import InlineWithdraw from './InlineWithdraw.svelte';
 
 	interface Props {
 		assets: AssetInfo[];
@@ -19,7 +17,8 @@
 
 	let { assets, address, onWithdrawDone, onDeposited }: Props = $props();
 
-	let expandedCardId = $state<string | null>(null);
+	let expandedCardId     = $state<string | null>(null);
+	let expandedWithdrawId = $state<string | null>(null);
 
 	const deposited = $derived(assets.filter(a => a.depositedBalance > 0n));
 
@@ -79,23 +78,6 @@
 		for (const a of deposited) sum += toEur(a, displayNums.get(a.id) ?? 0);
 		return sum;
 	});
-
-	// ── Withdraw ─────────────────────────────────────────────────────────────
-
-	let withdrawingId = $state<string | null>(null);
-	let errorId       = $state<string | null>(null);
-	let errorMsg      = $state<string | null>(null);
-
-	async function withdraw(asset: AssetInfo) {
-		withdrawingId = asset.id; errorId = null; errorMsg = null;
-		try {
-			await sendTransactions([{ to: AAVE_POOL, data: encodeWithdraw(asset.address, address) }]);
-			onWithdrawDone();
-		} catch (e: unknown) {
-			errorMsg = e instanceof Error ? e.message : 'Transaction rejected';
-			errorId  = asset.id; withdrawingId = null;
-		}
-	}
 
 	// ── Formatting ────────────────────────────────────────────────────────────
 
@@ -196,22 +178,19 @@
 					<!-- ⑤ Actions: Earn + Withdraw -->
 					<div class="flex gap-1.5 px-3 pb-3 pt-2">
 						<button
-							onclick={() => { expandedCardId = expandedCardId === asset.id ? null : asset.id; }}
-							disabled={withdrawingId !== null || asset.balance === 0n}
+							onclick={() => { expandedCardId = expandedCardId === asset.id ? null : asset.id; expandedWithdrawId = null; }}
+							disabled={asset.balance === 0n}
 							class="earn-btn flex-1 rounded-xl py-2 text-xs font-bold active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
 							style="background: {expandedCardId === asset.id ? 'var(--surface-2)' : 'var(--blue)'}; color: {expandedCardId === asset.id ? 'var(--text-muted)' : '#fff'}; border: {expandedCardId === asset.id ? '1.5px solid var(--border)' : 'none'}"
 						>
 							{expandedCardId === asset.id ? 'Cancel' : '+ Earn'}
 						</button>
 						<button
-							onclick={() => withdraw(asset)}
-							disabled={withdrawingId !== null}
-							class="flex-1 rounded-xl py-2 text-xs font-bold transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
-							style="border: 1.5px solid var(--border); color: var(--text-muted)"
-							onmouseenter={(e) => { if (!withdrawingId) { e.currentTarget.style.borderColor = '#dc2626'; e.currentTarget.style.color = '#dc2626'; } }}
-							onmouseleave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+							onclick={() => { expandedWithdrawId = expandedWithdrawId === asset.id ? null : asset.id; expandedCardId = null; }}
+							class="flex-1 rounded-xl py-2 text-xs font-bold transition-all active:scale-95"
+							style="border: 1.5px solid {expandedWithdrawId === asset.id ? 'rgba(220,38,38,0.4)' : 'var(--border)'}; color: {expandedWithdrawId === asset.id ? '#dc2626' : 'var(--text-muted)'}"
 						>
-							{withdrawingId === asset.id ? '…' : 'Out'}
+							Out
 						</button>
 					</div>
 				{:else}
@@ -253,8 +232,17 @@
 					</div>
 				{/if}
 
-				{#if errorId === asset.id && errorMsg}
-					<p class="px-3 pb-2 text-xs" style="color: #dc2626">{errorMsg}</p>
+				<!-- Inline withdraw form -->
+				{#if expandedWithdrawId === asset.id}
+					<div transition:slide={{ duration: 200 }} class="px-3 pb-3">
+						<InlineWithdraw
+							{asset}
+							{address}
+							depositedAmt={displayNums.get(asset.id) ?? 0}
+							onWithdrawn={() => { expandedWithdrawId = null; onWithdrawDone(); }}
+							onCancel={() => (expandedWithdrawId = null)}
+						/>
+					</div>
 				{/if}
 			</div>
 		{/each}
