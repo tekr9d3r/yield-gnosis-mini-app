@@ -4,16 +4,36 @@ A [Gnosis App Mini App](https://www.aboutcircles.com) that lets users deposit **
 
 ---
 
+## How it works
+
+Yield connects your wallet directly to **Aave v3's existing smart contracts** on Gnosis Chain. There are no new or custom smart contracts — the app simply encodes the standard Aave `approve` + `supply` calls and sends them to the official Aave v3 Pool. Withdrawals go through the same pool using the standard `withdraw` function.
+
+**No data is collected. No database. No backend storage of any kind.** Everything happens on-chain. The app reads balances and APY directly from the blockchain and from public APIs (DeFiLlama, Frankfurter). Nothing about you or your wallet is stored anywhere.
+
+---
+
 ## Features
 
 - **Deposit EURe & USDC.e** into Aave v3 with a single tap — approve + supply batched in one transaction
-- **Live earning counter** — balance updates every 100ms using float accrual math, no flicker
-- **Inline deposit/withdraw** — no page navigation, forms expand directly in the card
+- **Withdraw anytime** — partial or full, inline in the same card
+- **Live earning counter** — balance updates every 100ms using float accrual math
 - **Always-visible earning cards** — APY banner + invite to deposit even before funds are committed
 - **Subtle growth chart** — SVG line that draws on mount, gives a feel of funds growing
 - **Wallet sheet** — bottom drawer showing deposited + wallet balances with live ticking
 - **APY & TVL** fetched from DeFiLlama, cached for 5 minutes
 - **ETH/EUR prices** from DeFiLlama + Frankfurter API
+
+---
+
+## Privacy & Security
+
+| Topic | Detail |
+|---|---|
+| Smart contracts | Official Aave v3 contracts only — no custom contracts deployed |
+| Data storage | None — no database, no backend, no analytics |
+| Data collection | None — wallet address is never sent to any server controlled by this app |
+| Chain reads | Public RPC only (`rpc.gnosischain.com` with `rpc2.gnosischain.com` fallback) |
+| APY data | Public DeFiLlama API — read-only, no auth |
 
 ---
 
@@ -31,13 +51,15 @@ A [Gnosis App Mini App](https://www.aboutcircles.com) that lets users deposit **
 
 ## Contracts — Gnosis Chain (chainId 100)
 
+These are the **official Aave v3 deployments**. This app deploys nothing new.
+
 | Contract | Address |
 |---|---|
 | Aave v3 Pool | `0xb50201558B00496A145fE76f7424749556E326D8` |
 | EURe | `0xcb444e90d8198415266c6a2724b7900fb12fc56e` |
 | USDC.e | `0x2a22f9c3b484c3629090feed35f17ff8f88f76f0` |
 
-aToken addresses are resolved at runtime via `pool.getReserveData(asset).aTokenAddress`.
+aToken addresses (the yield-bearing receipt tokens) are resolved at runtime via `pool.getReserveData(asset).aTokenAddress`.
 
 ---
 
@@ -66,32 +88,15 @@ src/
 │   └── types.ts       # AssetInfo, AppPhase
 ├── components/
 │   ├── DepositedTable.svelte  # Always-visible earning cards (2-col grid)
-│   ├── AssetTable.svelte      # Wallet balance + APY spreadsheet
+│   ├── AssetTable.svelte      # Wallet balance list
 │   ├── InlineDeposit.svelte   # Inline deposit form (slide-down)
+│   ├── InlineWithdraw.svelte  # Inline withdraw form (slide-down)
 │   ├── GrowthLine.svelte      # Animated SVG growth chart
 │   ├── WalletSheet.svelte     # Bottom sheet wallet overview
 │   └── TokenLogo.svelte       # Logo with colored fallback
 └── routes/
     └── +page.svelte           # Root page — phase state machine
 ```
-
----
-
-## Live Counter Implementation
-
-Balances tick every 100ms using plain JS anchors (not Svelte `$state`) to avoid reactive loops:
-
-```ts
-// Anchor stores the chain-read base + timestamp
-const _anchors = new Map<string, { base: number; time: number }>();
-
-setInterval(() => {
-  const dt = (Date.now() - anchor.time) / 1000;
-  displayNum = anchor.base + anchor.base * (apy / 100) * dt / 31_536_000;
-}, 100);
-```
-
-The chain balance is re-read every 30s to stay accurate. Only `displayNums` is `$state` — the Map reference is replaced on each tick to trigger a single Svelte re-render.
 
 ---
 
