@@ -41,6 +41,7 @@
 	}
 
 	let tickInterval: ReturnType<typeof setInterval>;
+	let copyTimeout: ReturnType<typeof setTimeout>;
 
 	onMount(() => {
 		loadDeposited();
@@ -57,7 +58,7 @@
 		}, 100);
 	});
 
-	onDestroy(() => clearInterval(tickInterval));
+	onDestroy(() => { clearInterval(tickInterval); clearTimeout(copyTimeout); });
 
 	// ── Withdraw ──────────────────────────────────────────────────────────────
 
@@ -98,7 +99,7 @@
 	async function copyAddress() {
 		await navigator.clipboard.writeText(address);
 		copied = true;
-		setTimeout(() => (copied = false), 1500);
+		copyTimeout = setTimeout(() => (copied = false), 1500);
 	}
 
 	function fmtSpot(asset: AssetInfo): string {

@@ -1,9 +1,12 @@
-import { createPublicClient, http } from 'viem';
+import { createPublicClient, fallback, http } from 'viem';
 import { gnosis } from 'viem/chains';
 
 export const publicClient = createPublicClient({
 	chain: gnosis,
-	transport: http('https://rpc.gnosischain.com')
+	transport: fallback([
+		http('https://rpc.gnosischain.com'),
+		http('https://rpc2.gnosischain.com')
+	])
 });
 
 export const EURE_ADDRESS = '0xcb444e90d8198415266c6a2724b7900fb12fc56e' as const;

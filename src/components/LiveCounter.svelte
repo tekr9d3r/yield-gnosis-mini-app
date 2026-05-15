@@ -30,6 +30,15 @@
 	let tickInterval:  ReturnType<typeof setInterval>;
 	let chainInterval: ReturnType<typeof setInterval>;
 
+	function onVisibilityChange() {
+		if (document.hidden) {
+			clearInterval(chainInterval);
+		} else {
+			refreshFromChain();
+			chainInterval = setInterval(refreshFromChain, 30_000);
+		}
+	}
+
 	onMount(() => {
 		refreshFromChain();
 		tickInterval = setInterval(() => {
@@ -38,11 +47,13 @@
 			displayNum = _anchor.base + _anchor.base * (apy / 100) * dt / SEC_PER_YEAR;
 		}, 100);
 		chainInterval = setInterval(refreshFromChain, 30_000);
+		document.addEventListener('visibilitychange', onVisibilityChange);
 	});
 
 	onDestroy(() => {
 		clearInterval(tickInterval);
 		clearInterval(chainInterval);
+		document.removeEventListener('visibilitychange', onVisibilityChange);
 	});
 
 	// 4 decimals: "100.12" (large) + "34" (small)

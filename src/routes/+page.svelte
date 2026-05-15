@@ -17,7 +17,10 @@
 	let selectedAsset = $state<AssetInfo | null>(null);
 	let walletOpen    = $state(false);
 
+	let _loadId = 0;
+
 	async function loadData(addr: `0x${string}`) {
+		const id = ++_loadId;
 		phase = 'loading';
 
 		// Balances + APYs in parallel
@@ -25,6 +28,8 @@
 			fetchAllBalances(addr),
 			fetchAaveApys()
 		]);
+
+		if (id !== _loadId) return;
 
 		let list: AssetInfo[] = balancesResult.status === 'fulfilled'
 			? balancesResult.value
@@ -36,6 +41,8 @@
 		const aTokenResults = await Promise.allSettled(
 			list.map(a => getATokenAddress(a.address))
 		);
+
+		if (id !== _loadId) return;
 
 		list = list.map((a, i) => {
 			const poolData = apyMap.get(a.address.toLowerCase());
@@ -57,6 +64,8 @@
 				: Promise.resolve(0n)
 			)
 		);
+
+		if (id !== _loadId) return;
 
 		list = list.map((a, i) => ({
 			...a,

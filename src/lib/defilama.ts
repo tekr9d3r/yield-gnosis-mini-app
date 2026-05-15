@@ -1,3 +1,5 @@
+import { ASSET_CONFIGS } from './assets.js';
+
 interface LlamaPool {
 	project: string;
 	chain: string;
@@ -20,18 +22,13 @@ let cachedPools: Map<string, PoolData> | null = null;
 let cacheTs = 0;
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
-const WATCHED_ADDRESSES = new Set([
-	'0xcb444e90d8198415266c6a2724b7900fb12fc56e', // EURe
-	'0x2a22f9c3b484c3629090feed35f17ff8f88f76f0', // USDC.e
-	'0xe91d153e0b41518a2ce8dd3d7944fa863463a97d', // WXDAI
-	'0x6a023ccd1ff6f2045c3309768ead9e68f978f6e1'  // WETH
-]);
+const WATCHED_ADDRESSES = new Set(ASSET_CONFIGS.map(a => a.address.toLowerCase()));
 
 export async function fetchAaveApys(): Promise<Map<string, PoolData>> {
 	const now = Date.now();
 	if (cachedPools && now - cacheTs < CACHE_TTL_MS) return cachedPools;
 
-	const res = await fetch('https://yields.llama.fi/pools');
+	const res = await fetch('https://yields.llama.fi/pools', { signal: AbortSignal.timeout(8000) });
 	if (!res.ok) throw new Error(`DeFiLlama HTTP ${res.status}`);
 
 	const json: LlamaResponse = await res.json();

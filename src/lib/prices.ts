@@ -10,17 +10,16 @@ const CACHE_TTL_MS = 10 * 60 * 1000;
 export async function fetchTokenPrices(): Promise<TokenPrices> {
 	if (cached && Date.now() - cacheTs < CACHE_TTL_MS) return cached;
 
-	const [llamaRes, fxRes] = await Promise.all([
-		fetch('https://coins.llama.fi/prices/current/coingecko:ethereum'),
-		fetch('https://api.frankfurter.app/latest?from=USD&to=EUR')
+	const [llamaResult, fxResult] = await Promise.allSettled([
+		fetch('https://coins.llama.fi/prices/current/coingecko:ethereum', { signal: AbortSignal.timeout(5000) })
+			.then(r => r.json()),
+		fetch('https://api.frankfurter.app/latest?from=USD&to=EUR', { signal: AbortSignal.timeout(5000) })
+			.then(r => r.json())
 	]);
 
-	const llama = await llamaRes.json();
-	const fx = await fxRes.json();
-
 	const prices: TokenPrices = {
-		ethUsd:   llama.coins?.['coingecko:ethereum']?.price ?? 2500,
-		usdToEur: fx.rates?.EUR ?? 0.92
+		ethUsd:   llamaResult.status === 'fulfilled' ? (llamaResult.value.coins?.['coingecko:ethereum']?.price ?? 2500) : 2500,
+		usdToEur: fxResult.status === 'fulfilled'   ? (fxResult.value.rates?.EUR ?? 0.92)                             : 0.92
 	};
 
 	cached = prices;
