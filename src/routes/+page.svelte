@@ -14,6 +14,7 @@
 	import TipJar from '../components/TipJar.svelte';
 
 	let phase         = $state<AppPhase>('idle');
+	let inMiniapp     = $state(false);
 	let address       = $state<`0x${string}` | null>(null);
 	let assets        = $state<AssetInfo[]>([]);
 	let selectedAsset = $state<AssetInfo | null>(null);
@@ -139,17 +140,14 @@
 	}
 
 	onMount(() => {
-		if (isMiniappMode()) {
+		inMiniapp = isMiniappMode();
+		if (inMiniapp) {
 			onWalletChange(async (addr) => {
 				if (!addr) { phase = 'idle'; address = null; return; }
 				address = addr as `0x${string}`;
 				loadProfile(address);
 				await loadData(address);
 			});
-		} else {
-			address = '0x0000000000000000000000000000000000000001' as `0x${string}`;
-			loadProfile(address);
-			loadData(address);
 		}
 	});
 
@@ -197,18 +195,32 @@
 
 		<!-- Phases -->
 		{#if phase === 'idle' || phase === 'loading'}
-			<div class="flex flex-col items-center gap-4 py-24 text-center">
-				<div class="relative">
-					<div
-						class="h-12 w-12 animate-spin rounded-full border-2 border-transparent"
-						style="border-top-color: var(--blue); border-right-color: var(--blue)"
-					></div>
-					<span class="sparkle absolute -right-1 -top-1 text-xs" style="color: var(--orange)">✦</span>
+			{#if phase === 'idle' && !inMiniapp}
+				<div class="flex flex-col items-center gap-6 py-24 text-center">
+					<div class="flex h-16 w-16 items-center justify-center rounded-full" style="background: var(--surface); border: 1.5px solid var(--border)">
+						<span class="text-2xl">✦</span>
+					</div>
+					<div>
+						<p class="mb-2 text-base font-bold" style="color: var(--text)">Open in Circles</p>
+						<p class="max-w-xs text-sm" style="color: var(--text-muted)">
+							This app runs inside the Circles or Gnosis app. Open it there to connect your wallet and start earning.
+						</p>
+					</div>
 				</div>
-				<p class="text-sm" style="color: var(--text-muted)">
-					{phase === 'idle' ? 'Connecting wallet…' : 'Loading balances…'}
-				</p>
-			</div>
+			{:else}
+				<div class="flex flex-col items-center gap-4 py-24 text-center">
+					<div class="relative">
+						<div
+							class="h-12 w-12 animate-spin rounded-full border-2 border-transparent"
+							style="border-top-color: var(--blue); border-right-color: var(--blue)"
+						></div>
+						<span class="sparkle absolute -right-1 -top-1 text-xs" style="color: var(--orange)">✦</span>
+					</div>
+					<p class="text-sm" style="color: var(--text-muted)">
+						{phase === 'idle' ? 'Connecting wallet…' : 'Loading balances…'}
+					</p>
+				</div>
+			{/if}
 
 		{:else if phase === 'table'}
 			<DepositedTable
