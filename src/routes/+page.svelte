@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { isMiniappMode, onWalletChange } from '@aboutcircles/miniapp-sdk';
+	import { Sdk } from '@aboutcircles/sdk';
 	import { fetchAllBalances } from '$lib/balances.js';
 	import { fetchAaveApys, type PoolData } from '$lib/defilama.js';
 	import { getATokenAddress, getATokenBalance } from '$lib/aave.js';
@@ -10,12 +11,41 @@
 	import DepositCard from '../components/DepositCard.svelte';
 	import LiveCounter from '../components/LiveCounter.svelte';
 	import WalletSheet from '../components/WalletSheet.svelte';
+	import CirclesProfile from '../components/CirclesProfile.svelte';
+	import InviteButton from '../components/InviteButton.svelte';
 
 	let phase         = $state<AppPhase>('idle');
 	let address       = $state<`0x${string}` | null>(null);
 	let assets        = $state<AssetInfo[]>([]);
 	let selectedAsset = $state<AssetInfo | null>(null);
 	let walletOpen    = $state(false);
+
+	// Circles identity
+	let profileName     = $state<string | undefined>(undefined);
+	let profileImageUrl = $state<string | undefined>(undefined);
+	let trustCount      = $state(0);
+	let crcBalance      = $state(0);
+
+	let _sdk: Sdk | null = null;
+	function getSdk(): Sdk {
+		if (!_sdk) _sdk = new Sdk();
+		return _sdk;
+	}
+
+	async function loadProfile(addr: `0x${string}`) {
+		const sdk = getSdk();
+		const [prof, trusted, bal] = await Promise.allSettled([
+			sdk.rpc.profile.getProfileByAddress(addr),
+			sdk.rpc.trust.getTrustedBy(addr),
+			sdk.rpc.balance.getTotalBalance(addr)
+		]);
+		if (prof.status === 'fulfilled' && prof.value) {
+			profileName     = prof.value.name      ?? undefined;
+			profileImageUrl = prof.value.imageUrl  ?? undefined;
+		}
+		if (trusted.status === 'fulfilled') trustCount = trusted.value.length;
+		if (bal.status === 'fulfilled')     crcBalance = Number(bal.value) / 1e18;
+	}
 
 	let _loadId = 0;
 
@@ -110,10 +140,12 @@
 			onWalletChange(async (addr) => {
 				if (!addr) { phase = 'idle'; address = null; return; }
 				address = addr as `0x${string}`;
+				loadProfile(address);
 				await loadData(address);
 			});
 		} else {
 			address = '0x0000000000000000000000000000000000000001' as `0x${string}`;
+			loadProfile(address);
 			loadData(address);
 		}
 	});
@@ -142,15 +174,14 @@
 			</div>
 
 			{#if address}
-				<button
-					onclick={() => (walletOpen = true)}
-					class="flex items-center gap-2 rounded-full px-3 py-1.5 transition-all active:scale-95"
-					style="background: var(--surface); border: 1px solid var(--border); box-shadow: 0 1px 4px rgba(55,55,200,0.08)"
-				>
-					<div class="h-2 w-2 rounded-full" style="background: var(--green)"></div>
-					<span class="font-mono text-xs font-semibold" style="color: var(--text-muted)">
-						{address.slice(0, 6)}…{address.slice(-4)}
-					</span>
+				<button onclick={() => (walletOpen = true)} class="transition-opacity hover:opacity-80 active:scale-95">
+					<CirclesProfile
+						{address}
+						name={profileName}
+						imageUrl={profileImageUrl}
+						{trustCount}
+						{crcBalance}
+					/>
 				</button>
 			{/if}
 		</header>
@@ -179,6 +210,7 @@
 			/>
 			<div class="my-4 border-t" style="border-color: var(--border)"></div>
 			<AssetTable {assets} address={address!} onDeposited={() => loadData(address!)} />
+			<InviteButton address={address!} />
 
 		{:else if phase === 'deposit' && selectedAsset && address}
 			<DepositCard
