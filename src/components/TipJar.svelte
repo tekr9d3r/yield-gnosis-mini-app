@@ -11,12 +11,12 @@
 
 	let { address, crcBalance }: Props = $props();
 
-	const CRC_USD = 0.10;
+	const CRC_EUR = 0.01;
 
 	const PRESETS = [
-		{ amount: 1,  emoji: '🙏', label: 'Small tip' },
-		{ amount: 10, emoji: '☕', label: 'Coffee'    },
-		{ amount: 50, emoji: '🍕', label: 'Pizza'      }
+		{ amount: 10,  emoji: '🙏', label: 'Small tip' },
+		{ amount: 100, emoji: '☕', label: 'Coffee'    },
+		{ amount: 500, emoji: '🍕', label: 'Pizza'     }
 	];
 
 	type Status = 'idle' | 'sending' | 'success' | 'error';
@@ -44,9 +44,9 @@
 
 	onDestroy(() => clearTimeout(resetTimeout));
 
-	function fmtUsd(amount: number): string {
-		const usd = amount * CRC_USD;
-		return usd < 1 ? `≈$${usd.toFixed(2)}` : `≈$${usd.toLocaleString('en', { maximumFractionDigits: 0 })}`;
+	function fmtEur(amount: number): string {
+		const eur = amount * CRC_EUR;
+		return eur < 1 ? `≈€${eur.toFixed(2)}` : `≈€${eur.toLocaleString('en', { maximumFractionDigits: 2 })}`;
 	}
 </script>
 
@@ -68,7 +68,7 @@
 			>
 				<span class="text-lg leading-none">{preset.emoji}</span>
 				<span class="text-xs font-bold tabular-nums" style="color: var(--text)">{preset.amount} CRC</span>
-				<span class="text-[10px]" style="color: var(--text-dim)">{fmtUsd(preset.amount)}</span>
+				<span class="text-[10px]" style="color: var(--text-dim)">{fmtEur(preset.amount)}</span>
 			</button>
 		{/each}
 	</div>
