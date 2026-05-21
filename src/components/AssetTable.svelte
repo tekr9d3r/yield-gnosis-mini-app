@@ -7,9 +7,16 @@
 		assets: AssetInfo[];
 		address: `0x${string}`;
 		onDeposited: () => void;
+		crcBalance?: number;
 	}
 
-	let { assets }: Props = $props();
+	let { assets, crcBalance = 0 }: Props = $props();
+
+	function fmtCrc(n: number): string {
+		if (n === 0) return '—';
+		if (n < 0.01) return '<0.01';
+		return n.toLocaleString('en', { maximumFractionDigits: 2 });
+	}
 
 	function fmtBalance(asset: AssetInfo): string {
 		const n = parseFloat(formatUnits(asset.balance, asset.decimals));
@@ -36,6 +43,22 @@
 	<div class="grid items-center gap-2 px-3 pb-1" style="grid-template-columns: 1fr 90px">
 		<span class="text-xs font-bold uppercase tracking-widest" style="color: var(--text-dim)">Asset</span>
 		<span class="text-right text-xs font-bold uppercase tracking-widest" style="color: var(--text-dim)">Balance</span>
+	</div>
+
+	<!-- CRC row -->
+	<div class="grid items-center gap-2 rounded-2xl px-3 py-3" style="background: var(--surface); grid-template-columns: 1fr 90px">
+		<div class="flex min-w-0 items-center gap-2.5">
+			<img src="/img/crc-logo.webp" alt="CRC" class="h-9 w-9 shrink-0 rounded-full object-cover" />
+			<div class="min-w-0">
+				<p class="truncate text-sm font-bold" style="color: var(--text)">CRC</p>
+				<p class="truncate text-xs" style="color: var(--text-dim)">Circles</p>
+			</div>
+		</div>
+		<div class="text-right">
+			<p class="text-sm font-bold tabular-nums" style="color: {crcBalance > 0 ? 'var(--text)' : 'var(--text-dim)'}">
+				{fmtCrc(crcBalance)}
+			</p>
+		</div>
 	</div>
 
 	<!-- Rows -->

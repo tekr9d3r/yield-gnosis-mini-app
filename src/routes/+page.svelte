@@ -11,6 +11,7 @@
 	import DepositCard from '../components/DepositCard.svelte';
 	import LiveCounter from '../components/LiveCounter.svelte';
 	import WalletSheet from '../components/WalletSheet.svelte';
+	import TipJar from '../components/TipJar.svelte';
 
 	let phase         = $state<AppPhase>('idle');
 	let address       = $state<`0x${string}` | null>(null);
@@ -39,7 +40,7 @@
 		]);
 		if (prof.status === 'fulfilled' && prof.value) {
 			profileName = prof.value.name ?? undefined;
-			const p = prof.value as Record<string, unknown>;
+			const p = prof.value as unknown as Record<string, unknown>;
 			const raw = (p.picture ?? p.imageUrl ?? null) as string | null;
 			profileImageUrl = raw?.startsWith('ipfs://')
 				? raw.replace('ipfs://', 'https://ipfs.io/ipfs/')
@@ -217,7 +218,7 @@
 				onDeposited={() => loadData(address!)}
 			/>
 			<div class="my-4 border-t" style="border-color: var(--border)"></div>
-			<AssetTable {assets} address={address!} onDeposited={() => loadData(address!)} />
+			<AssetTable {assets} address={address!} onDeposited={() => loadData(address!)} {crcBalance} />
 
 		{:else if phase === 'deposit' && selectedAsset && address}
 			<DepositCard
@@ -250,14 +251,12 @@
 			</div>
 		{/if}
 
-		<!-- Footer -->
+		<!-- Footer + Tip -->
 		<footer
 			class="mt-8 rounded-2xl p-4"
 			style="background: var(--surface); border: 1px solid var(--border); box-shadow: 0 2px 8px rgba(55,55,200,0.06)"
 		>
-			<p class="mb-3 text-center text-xs font-bold uppercase tracking-widest" style="color: var(--text-dim)">
-				Built by
-			</p>
+			<!-- Builder row -->
 			<div class="flex items-center gap-3">
 				<img
 					src="/tekr0x-avatar.jpg"
@@ -291,6 +290,12 @@
 					Join my circle ✦
 				</a>
 			</div>
+
+			{#if phase === 'table' && address}
+				<!-- Divider -->
+				<div class="my-4 border-t" style="border-color: var(--border)"></div>
+				<TipJar {address} {crcBalance} />
+			{/if}
 		</footer>
 
 	</div>
