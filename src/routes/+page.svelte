@@ -11,7 +11,6 @@
 	import DepositCard from '../components/DepositCard.svelte';
 	import LiveCounter from '../components/LiveCounter.svelte';
 	import WalletSheet from '../components/WalletSheet.svelte';
-	import InviteButton from '../components/InviteButton.svelte';
 
 	let phase         = $state<AppPhase>('idle');
 	let address       = $state<`0x${string}` | null>(null);
@@ -219,7 +218,6 @@
 			/>
 			<div class="my-4 border-t" style="border-color: var(--border)"></div>
 			<AssetTable {assets} address={address!} onDeposited={() => loadData(address!)} />
-			<InviteButton address={address!} />
 
 		{:else if phase === 'deposit' && selectedAsset && address}
 			<DepositCard
