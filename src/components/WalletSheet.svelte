@@ -12,9 +12,23 @@
 		assets: AssetInfo[];
 		onClose: () => void;
 		onWithdrawDone: () => void;
+		profileName?: string;
+		profileImageUrl?: string;
+		trustCount?: number;
+		crcBalance?: number;
 	}
 
-	let { address, assets, onClose, onWithdrawDone }: Props = $props();
+	let { address, assets, onClose, onWithdrawDone, profileName, profileImageUrl, trustCount = 0, crcBalance = 0 }: Props = $props();
+
+	const displayName = $derived(profileName || `${address.slice(0, 6)}…${address.slice(-4)}`);
+
+	let imgError = $state(false);
+
+	function fmtCrc(n: number): string {
+		if (n === 0) return '0';
+		if (n < 0.01) return '<0.01';
+		return n.toLocaleString('en', { maximumFractionDigits: 2 });
+	}
 
 	// ── Deposited balances (plain JS anchors, 100ms smooth tick) ────────────
 
@@ -142,20 +156,54 @@
 		<!-- Handle -->
 		<div class="mx-auto mb-5 h-1 w-10 rounded-full" style="background: var(--border)"></div>
 
-		<!-- Address row -->
+		<!-- Profile row -->
 		<div class="mb-5 rounded-2xl p-4" style="background: var(--surface); border: 1px solid var(--border)">
-			<div class="flex items-center justify-between gap-2">
-				<div class="flex items-center gap-2">
-					<div class="h-2.5 w-2.5 rounded-full" style="background: var(--green)"></div>
-					<span class="font-mono text-sm font-semibold" style="color: var(--text)">{shortAddr}</span>
+			<div class="flex items-center gap-3">
+				<!-- Avatar -->
+				{#if profileImageUrl && !imgError}
+					<img
+						src={profileImageUrl}
+						alt={displayName}
+						class="h-12 w-12 shrink-0 rounded-full object-cover"
+						style="border: 2px solid var(--green)"
+						onerror={() => (imgError = true)}
+					/>
+				{:else}
+					<div
+						class="flex h-12 w-12 shrink-0 items-center justify-content-center items-center justify-center rounded-full"
+						style="background: var(--blue); border: 2px solid var(--green)"
+					>
+						<span class="text-sm font-black text-white">{displayName.slice(0, 2).toUpperCase()}</span>
+					</div>
+				{/if}
+
+				<!-- Name + badges -->
+				<div class="min-w-0 flex-1">
+					<p class="mb-1 truncate text-sm font-bold" style="color: var(--text)">{displayName}</p>
+					<div class="flex flex-wrap items-center gap-1.5">
+						{#if trustCount > 0}
+							<span class="rounded-full px-2 py-0.5 text-[10px] font-semibold" style="background: rgba(22,163,74,0.12); color: var(--green)">👥 {trustCount} trusted</span>
+						{/if}
+						{#if crcBalance > 0}
+							<span class="rounded-full px-2 py-0.5 text-[10px] font-semibold" style="background: rgba(55,55,200,0.1); color: var(--blue)">{fmtCrc(crcBalance)} CRC</span>
+						{/if}
+					</div>
 				</div>
+
+				<!-- Copy address -->
 				<button
 					onclick={copyAddress}
-					class="rounded-lg px-3 py-1.5 text-xs font-bold transition-all active:scale-95"
+					class="shrink-0 rounded-lg px-3 py-1.5 text-xs font-bold transition-all active:scale-95"
 					style="background: var(--blue-light); color: var(--blue)"
 				>
 					{copied ? '✓ Copied' : 'Copy'}
 				</button>
+			</div>
+
+			<!-- Address -->
+			<div class="mt-3 flex items-center gap-2 border-t pt-3" style="border-color: var(--border)">
+				<div class="h-2 w-2 shrink-0 rounded-full" style="background: var(--green)"></div>
+				<span class="font-mono text-xs" style="color: var(--text-muted)">{shortAddr}</span>
 			</div>
 		</div>
 

@@ -11,7 +11,6 @@
 	import DepositCard from '../components/DepositCard.svelte';
 	import LiveCounter from '../components/LiveCounter.svelte';
 	import WalletSheet from '../components/WalletSheet.svelte';
-	import CirclesProfile from '../components/CirclesProfile.svelte';
 	import InviteButton from '../components/InviteButton.svelte';
 
 	let phase         = $state<AppPhase>('idle');
@@ -40,8 +39,12 @@
 			sdk.rpc.balance.getTotalBalance(addr)
 		]);
 		if (prof.status === 'fulfilled' && prof.value) {
-			profileName     = prof.value.name      ?? undefined;
-			profileImageUrl = prof.value.imageUrl  ?? undefined;
+			profileName = prof.value.name ?? undefined;
+			const p = prof.value as Record<string, unknown>;
+			const raw = (p.picture ?? p.imageUrl ?? null) as string | null;
+			profileImageUrl = raw?.startsWith('ipfs://')
+				? raw.replace('ipfs://', 'https://ipfs.io/ipfs/')
+				: raw ?? undefined;
 		}
 		if (trusted.status === 'fulfilled') trustCount = trusted.value.length;
 		if (bal.status === 'fulfilled')     crcBalance = Number(bal.value) / 1e18;
@@ -174,14 +177,20 @@
 			</div>
 
 			{#if address}
-				<button onclick={() => (walletOpen = true)} class="transition-opacity hover:opacity-80 active:scale-95">
-					<CirclesProfile
-						{address}
-						name={profileName}
-						imageUrl={profileImageUrl}
-						{trustCount}
-						{crcBalance}
-					/>
+				<button
+					onclick={() => (walletOpen = true)}
+					class="flex items-center gap-2 rounded-full py-1 pl-1 pr-3 transition-all active:scale-95"
+					style="background: var(--surface); border: 1px solid var(--border)"
+				>
+					{#if profileImageUrl}
+						<img src={profileImageUrl} alt="" class="h-7 w-7 rounded-full object-cover" style="border: 1.5px solid var(--green)" />
+					{:else}
+						<div class="flex h-7 w-7 items-center justify-center rounded-full" style="background: var(--blue); border: 1.5px solid var(--green)">
+							<span class="text-[10px] font-black text-white">{(profileName || address).slice(0, 2).toUpperCase()}</span>
+						</div>
+					{/if}
+					<div class="h-1.5 w-1.5 rounded-full" style="background: var(--green)"></div>
+					<span class="font-mono text-xs font-semibold" style="color: var(--text-muted)">{address.slice(0,6)}…{address.slice(-4)}</span>
 				</button>
 			{/if}
 		</header>
@@ -293,6 +302,10 @@
 	<WalletSheet
 		{address}
 		{assets}
+		profileName={profileName}
+		profileImageUrl={profileImageUrl}
+		{trustCount}
+		{crcBalance}
 		onClose={() => (walletOpen = false)}
 		onWithdrawDone={() => { walletOpen = false; loadData(address!); }}
 	/>
