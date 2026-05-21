@@ -1,17 +1,22 @@
 <script lang="ts">
-	import { onDestroy } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { parseUnits } from 'viem';
 	import { sendTransactions } from '@aboutcircles/miniapp-sdk';
-	import { CIRCLES_HUB_V2, encodeCirclesTip } from '$lib/chains.js';
+	import { CIRCLES_HUB_V2, encodeCirclesTip, getPersonalCrcBalance } from '$lib/chains.js';
 
 	interface Props {
 		address: string;
-		crcBalance: number;
 	}
 
-	let { address, crcBalance }: Props = $props();
+	let { address }: Props = $props();
 
 	const CRC_EUR = 0.01;
+
+	let personalCrc = $state(0);
+
+	onMount(async () => {
+		personalCrc = await getPersonalCrcBalance(address as `0x${string}`);
+	});
 
 	const PRESETS = [
 		{ amount: 10,  emoji: '🙏', label: 'Small tip' },
@@ -57,7 +62,7 @@
 
 	<div class="flex gap-2">
 		{#each PRESETS as preset}
-			{@const canTip = crcBalance >= preset.amount}
+			{@const canTip = personalCrc >= preset.amount}
 			<button
 				onclick={() => tip(preset.amount)}
 				disabled={status === 'sending' || !canTip}

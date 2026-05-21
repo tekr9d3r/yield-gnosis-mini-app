@@ -294,7 +294,7 @@
 			{#if phase === 'table' && address}
 				<!-- Divider -->
 				<div class="my-4 border-t" style="border-color: var(--border)"></div>
-				<TipJar {address} {crcBalance} />
+				<TipJar {address} />
 			{/if}
 		</footer>
 
