@@ -1,22 +1,13 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
-	import { parseUnits } from 'viem';
 	import { sendTransactions } from '@aboutcircles/miniapp-sdk';
-	import { CIRCLES_HUB_V2, encodeCirclesTip, getPersonalCrcBalance } from '$lib/chains.js';
+	import { CIRCLES_HUB_V2, encodeCirclesTip } from '$lib/chains.js';
 
-	interface Props {
-		address: string;
-	}
-
+	interface Props { address: string; }
 	let { address }: Props = $props();
 
 	const CRC_EUR = 0.01;
-
-	let personalCrc = $state(0);
-
-	onMount(async () => {
-		personalCrc = await getPersonalCrcBalance(address as `0x${string}`);
-	});
+	const CIRCLES_RPC = 'https://rpc.aboutcircles.com/';
 
 	const PRESETS = [
 		{ amount: 10,  emoji: '🙏', label: 'Small tip' },
@@ -24,19 +15,51 @@
 		{ amount: 500, emoji: '🍕', label: 'Pizza'     }
 	];
 
-	type Status = 'idle' | 'sending' | 'success' | 'error';
-	let status    = $state<Status>('idle');
-	let errorMsg  = $state<string | null>(null);
+	type CrcToken = {
+		tokenId: string;
+		circles: number;
+		attoCircles: string;
+		staticAttoCircles: string;
+		isErc1155: boolean;
+		isWrapped: boolean;
+	};
+
+	type Status = 'idle' | 'loading' | 'sending' | 'success' | 'error';
+	let status           = $state<Status>('loading');
+	let errorMsg         = $state<string | null>(null);
+	let transferable     = $state(0);
+	let erc1155Tokens    = $state<CrcToken[]>([]);
 	let resetTimeout: ReturnType<typeof setTimeout>;
+
+	onMount(async () => {
+		try {
+			const res  = await fetch(CIRCLES_RPC, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'circles_getTokenBalances', params: [address] })
+			});
+			const json = await res.json();
+			const tokens: CrcToken[] = (json.result ?? []).filter((t: CrcToken) => t.isErc1155 && !t.isWrapped);
+			erc1155Tokens = tokens;
+			transferable  = tokens.reduce((s, t) => s + t.circles, 0);
+		} catch { /* leave transferable = 0 */ }
+		status = 'idle';
+	});
+
+	onDestroy(() => clearTimeout(resetTimeout));
 
 	async function tip(amount: number) {
 		status   = 'sending';
 		errorMsg = null;
 		try {
-			const raw = parseUnits(String(amount), 18);
+			// Pick the ERC1155 token with the most balance
+			const token = erc1155Tokens.reduce((best, t) => t.circles > best.circles ? t : best);
+			// Convert requested demurraged amount → static attoCircles
+			const demurragedAtto  = BigInt(amount) * 10n ** 18n;
+			const staticAtto      = demurragedAtto * BigInt(token.staticAttoCircles) / BigInt(token.attoCircles);
 			await sendTransactions([{
 				to:   CIRCLES_HUB_V2,
-				data: encodeCirclesTip(address as `0x${string}`, raw)
+				data: encodeCirclesTip(address as `0x${string}`, BigInt(token.tokenId), staticAtto)
 			}]);
 			status = 'success';
 			clearTimeout(resetTimeout);
@@ -46,8 +69,6 @@
 			status   = 'error';
 		}
 	}
-
-	onDestroy(() => clearTimeout(resetTimeout));
 
 	function fmtEur(amount: number): string {
 		const eur = amount * CRC_EUR;
@@ -62,7 +83,7 @@
 
 	<div class="flex gap-2">
 		{#each PRESETS as preset}
-			{@const canTip = personalCrc >= preset.amount}
+			{@const canTip = status !== 'loading' && transferable >= preset.amount && erc1155Tokens.length > 0}
 			<button
 				onclick={() => tip(preset.amount)}
 				disabled={status === 'sending' || !canTip}
@@ -78,7 +99,9 @@
 		{/each}
 	</div>
 
-	{#if status === 'sending'}
+	{#if status === 'loading'}
+		<p class="mt-2 text-xs" style="color: var(--text-dim)">Checking CRC balance…</p>
+	{:else if status === 'sending'}
 		<p class="mt-2 text-xs" style="color: var(--text-muted)">Sending…</p>
 	{:else if status === 'success'}
 		<p class="mt-2 text-sm font-bold" style="color: var(--green)">✓ Sent! Thank you 🙏</p>

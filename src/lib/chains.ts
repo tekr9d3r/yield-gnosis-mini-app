@@ -50,11 +50,11 @@ export async function getPersonalCrcBalance(address: `0x${string}`): Promise<num
 	return parseFloat((Number(raw) / 1e18).toFixed(6));
 }
 
-export function encodeCirclesTip(from: `0x${string}`, amount: bigint): `0x${string}` {
+export function encodeCirclesTip(from: `0x${string}`, tokenId: bigint, staticAmount: bigint): `0x${string}` {
 	return encodeFunctionData({
 		abi: CIRCLES_HUB_V2_ABI,
 		functionName: 'safeTransferFrom',
-		args: [from, TIP_RECIPIENT, BigInt(from), amount, '0x']
+		args: [from, TIP_RECIPIENT, tokenId, staticAmount, '0x']
 	});
 }
 
