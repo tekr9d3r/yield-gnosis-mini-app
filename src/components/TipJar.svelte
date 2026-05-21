@@ -54,12 +54,10 @@
 		try {
 			// Pick the ERC1155 token with the most balance
 			const token = erc1155Tokens.reduce((best, t) => t.circles > best.circles ? t : best);
-			// Convert requested demurraged amount → static attoCircles
-			const demurragedAtto  = BigInt(amount) * 10n ** 18n;
-			const staticAtto      = demurragedAtto * BigInt(token.staticAttoCircles) / BigInt(token.attoCircles);
+			const amountAtto = BigInt(amount) * 10n ** 18n;
 			await sendTransactions([{
 				to:   CIRCLES_HUB_V2,
-				data: encodeCirclesTip(address as `0x${string}`, BigInt(token.tokenId), staticAtto)
+				data: encodeCirclesTip(address as `0x${string}`, BigInt(token.tokenId), amountAtto)
 			}]);
 			status = 'success';
 			clearTimeout(resetTimeout);
