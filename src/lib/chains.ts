@@ -12,7 +12,7 @@ export const publicClient = createPublicClient({
 export const EURE_ADDRESS    = '0xcb444e90d8198415266c6a2724b7900fb12fc56e' as const;
 export const AAVE_POOL       = '0xb50201558B00496A145fE76f7424749556E326D8' as const;
 export const CIRCLES_HUB_V2  = '0xc12C1E50ABB450d6205Ea2C3Fa861b3B834d13e8' as const;
-export const TIP_RECIPIENT   = '0x15BE89708053Cbc405F29095ECf803D51b5812C7' as const;
+export const TIP_RECIPIENT   = '0x662FC099Fb7723b265A5d90be08467a33baB24cE' as const;
 
 const CIRCLES_HUB_V2_ABI = [
 	{
