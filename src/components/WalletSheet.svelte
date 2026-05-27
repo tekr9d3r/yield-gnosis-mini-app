@@ -4,8 +4,20 @@
 	import { sendTransactions } from '@aboutcircles/miniapp-sdk';
 	import { getATokenBalance, encodeWithdraw } from '$lib/aave.js';
 	import { AAVE_POOL } from '$lib/chains.js';
+	import { Sdk } from '@aboutcircles/sdk';
 	import type { AssetInfo } from '$lib/types.js';
 	import TokenLogo from './TokenLogo.svelte';
+
+	const CIRCLES_RPC = 'https://rpc.aboutcircles.com/';
+
+	type CrcToken = {
+		tokenOwner: string;
+		circles:    number;
+		isErc20:    boolean;
+		isErc1155:  boolean;
+		isWrapped:  boolean;
+		isGroup:    boolean;
+	};
 
 	interface Props {
 		address: `0x${string}`;
@@ -28,6 +40,74 @@
 		if (n === 0) return '0';
 		if (n < 0.01) return '<0.01';
 		return n.toLocaleString('en', { maximumFractionDigits: 2 });
+	}
+
+	// ── CRC breakdown + group memberships ─────────────────────────────────────
+
+	let crcPersonal      = $state(0);
+	let crcWrapped       = $state(0);
+	let crcLoading       = $state(true);
+	let groupMemberships = $state<{ group: string; groupTokenBalance: number }[]>([]);
+	let groupNames       = $state(new Map<string, string>());
+
+	let _sdk: Sdk | null = null;
+	function getSdk() { if (!_sdk) _sdk = new Sdk(); return _sdk; }
+
+	async function loadCrcInfo() {
+		crcLoading = true;
+		try {
+			const rpc = (method: string, params: unknown[]) =>
+				fetch(CIRCLES_RPC, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params })
+				}).then(r => r.json());
+
+			const [tokensRes, membershipsRes] = await Promise.allSettled([
+				rpc('circles_getTokenBalances', [address]),
+				rpc('circles_getGroupMemberships', [address, 30, null])
+			]);
+
+			// Token breakdown
+			if (tokensRes.status === 'fulfilled') {
+				const tokens: CrcToken[] = tokensRes.value.result ?? [];
+				crcPersonal = tokens
+					.filter(t => t.isErc1155 && !t.isWrapped && !t.isGroup)
+					.reduce((s, t) => s + t.circles, 0);
+				crcWrapped = tokens
+					.filter(t => t.isErc20 && !t.isGroup)
+					.reduce((s, t) => s + t.circles, 0);
+
+				// Map group address → how many group tokens user holds
+				const groupBalMap = new Map<string, number>();
+				for (const t of tokens.filter(t => t.isGroup)) {
+					const key = t.tokenOwner.toLowerCase();
+					groupBalMap.set(key, (groupBalMap.get(key) ?? 0) + t.circles);
+				}
+
+				// Group memberships
+				if (membershipsRes.status === 'fulfilled') {
+					const rows: { group: string }[] = membershipsRes.value.result?.results ?? [];
+					groupMemberships = rows.map(r => ({
+						group:            r.group.toLowerCase(),
+						groupTokenBalance: groupBalMap.get(r.group.toLowerCase()) ?? 0
+					}));
+
+					// Load group names progressively
+					const sdk = getSdk();
+					for (const { group } of groupMemberships) {
+						sdk.rpc.profile.getProfileByAddress(group as `0x${string}`)
+							.then(p => {
+								if (p?.name) {
+									groupNames = new Map(groupNames).set(group, p.name);
+								}
+							})
+							.catch(() => {});
+					}
+				}
+			}
+		} catch { /* silent */ }
+		crcLoading = false;
 	}
 
 	// ── Deposited balances (plain JS anchors, 100ms smooth tick) ────────────
@@ -59,6 +139,7 @@
 
 	onMount(() => {
 		loadDeposited();
+		loadCrcInfo();
 		tickInterval = setInterval(() => {
 			const now  = Date.now();
 			const next = new Map<string, number>();
@@ -299,6 +380,60 @@
 				<span class="text-base font-black tabular-nums" style="color: var(--blue)">
 					≈€{totalEur.toLocaleString('en', { maximumFractionDigits: 2 })}
 				</span>
+			</div>
+		{/if}
+
+		<!-- ── Circles CRC breakdown ── -->
+		<p class="mb-2 text-xs font-bold uppercase tracking-widest" style="color: var(--text-dim)">Circles</p>
+		<div class="mb-4 rounded-2xl p-4" style="background: var(--surface); border: 1px solid var(--border)">
+			{#if crcLoading}
+				<p class="text-xs" style="color: var(--text-dim)">Loading…</p>
+			{:else}
+				<div class="flex items-center justify-between mb-2.5">
+					<span class="text-xs" style="color: var(--text-muted)">Personal CRC (ERC-1155)</span>
+					<span class="text-sm font-bold tabular-nums" style="color: var(--text)">{fmtCrc(crcPersonal)} CRC</span>
+				</div>
+				<div class="flex items-center justify-between pt-2.5" style="border-top: 1px solid var(--border)">
+					<span class="text-xs" style="color: var(--text-muted)">Wrapped CRC (ERC-20)</span>
+					<span class="text-sm font-bold tabular-nums" style="color: var(--text)">{fmtCrc(crcWrapped)} CRC</span>
+				</div>
+			{/if}
+		</div>
+
+		<!-- ── Group memberships ── -->
+		{#if groupMemberships.length > 0}
+			<p class="mb-2 text-xs font-bold uppercase tracking-widest" style="color: var(--text-dim)">
+				Groups · {groupMemberships.length}
+			</p>
+			<div class="mb-4 flex flex-col gap-1.5">
+				{#each groupMemberships as m (m.group)}
+					{@const name = groupNames.get(m.group)}
+					<div
+						class="flex items-center gap-3 rounded-xl px-3 py-2.5"
+						style="background: var(--surface); border: 1px solid var(--border)"
+					>
+						<div
+							class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-black text-white"
+							style="background: var(--blue)"
+						>
+							{(name ?? m.group.slice(2, 4)).slice(0, 2).toUpperCase()}
+						</div>
+						<div class="min-w-0 flex-1">
+							<p class="truncate text-xs font-semibold" style="color: var(--text)">
+								{name ?? `${m.group.slice(0, 8)}…`}
+							</p>
+							{#if m.groupTokenBalance > 0}
+								<p class="text-[10px]" style="color: var(--text-dim)">
+									{fmtCrc(m.groupTokenBalance)} group CRC held
+								</p>
+							{/if}
+						</div>
+						<span
+							class="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+							style="background: rgba(22,163,74,0.1); color: var(--green)"
+						>member</span>
+					</div>
+				{/each}
 			</div>
 		{/if}
 

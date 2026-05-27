@@ -12,13 +12,16 @@
 	import LiveCounter from '../components/LiveCounter.svelte';
 	import WalletSheet from '../components/WalletSheet.svelte';
 	import TipJar from '../components/TipJar.svelte';
+	import YieldPotCard from '../components/YieldPotCard.svelte';
+	import YieldPotSheet from '../components/YieldPotSheet.svelte';
 
 	let phase         = $state<AppPhase>('idle');
 	let inMiniapp     = $state(false);
 	let address       = $state<`0x${string}` | null>(null);
 	let assets        = $state<AssetInfo[]>([]);
 	let selectedAsset = $state<AssetInfo | null>(null);
-	let walletOpen    = $state(false);
+	let walletOpen       = $state(false);
+	let yieldPotOpen     = $state(false);
 
 	// Circles identity
 	let profileName     = $state<string | undefined>(undefined);
@@ -232,6 +235,11 @@
 			<div class="my-4 border-t" style="border-color: var(--border)"></div>
 			<AssetTable {assets} address={address!} onDeposited={() => loadData(address!)} {crcBalance} />
 
+			<!-- YieldPot CTA -->
+			<div class="mt-4">
+				<YieldPotCard address={address!} onOpen={() => (yieldPotOpen = true)} />
+			</div>
+
 		{:else if phase === 'deposit' && selectedAsset && address}
 			<DepositCard
 				{address}
@@ -312,6 +320,10 @@
 
 	</div>
 </main>
+
+{#if yieldPotOpen && address}
+	<YieldPotSheet address={address} onClose={() => (yieldPotOpen = false)} />
+{/if}
 
 {#if walletOpen && address}
 	<WalletSheet

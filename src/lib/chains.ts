@@ -9,10 +9,12 @@ export const publicClient = createPublicClient({
 	])
 });
 
-export const EURE_ADDRESS    = '0xcb444e90d8198415266c6a2724b7900fb12fc56e' as const;
-export const AAVE_POOL       = '0xb50201558B00496A145fE76f7424749556E326D8' as const;
-export const CIRCLES_HUB_V2  = '0xc12C1E50ABB450d6205Ea2C3Fa861b3B834d13e8' as const;
-export const TIP_RECIPIENT   = '0x15BE89708053Cbc405F29095ECf803D51b5812C7' as const;
+export const EURE_ADDRESS         = '0xcb444e90d8198415266c6a2724b7900fb12fc56e' as const;
+export const AAVE_POOL            = '0xb50201558B00496A145fE76f7424749556E326D8' as const;
+export const CIRCLES_HUB_V2       = '0xc12C1E50ABB450d6205Ea2C3Fa861b3B834d13e8' as const;
+export const TIP_RECIPIENT        = '0x15BE89708053Cbc405F29095ECf803D51b5812C7' as const;
+export const YIELDPOT_GROUP    = '0xA7b485Eae7EC8793f29C1ebb268455705c5B67AF' as const;
+export const YIELDPOT_TREASURY = '0x5C36Ed9663742c791bE6eDB993847c306Cb8f4b3' as const;
 
 const CIRCLES_HUB_V2_ABI = [
 	{
@@ -37,7 +39,17 @@ const CIRCLES_HUB_V2_ABI = [
 			{ name: 'id',      type: 'uint256' }
 		],
 		outputs: [{ name: '', type: 'uint256' }]
-	}
+	},
+	{
+		name: 'trust',
+		type: 'function',
+		stateMutability: 'nonpayable',
+		inputs: [
+			{ name: '_trustReceiver', type: 'address' },
+			{ name: '_expiry',        type: 'uint96'  }
+		],
+		outputs: []
+	},
 ] as const;
 
 export async function getPersonalCrcBalance(address: `0x${string}`): Promise<number> {
@@ -48,6 +60,15 @@ export async function getPersonalCrcBalance(address: `0x${string}`): Promise<num
 		args: [address, BigInt(address)]
 	});
 	return parseFloat((Number(raw) / 1e18).toFixed(6));
+}
+
+
+export function encodeSupportGroup(group: `0x${string}`): `0x${string}` {
+	return encodeFunctionData({
+		abi: CIRCLES_HUB_V2_ABI,
+		functionName: 'trust',
+		args: [group, BigInt('0xFFFFFFFFFFFFFFFFFFFFFFFF')]
+	});
 }
 
 export function encodeCirclesTip(from: `0x${string}`, tokenId: bigint, staticAmount: bigint): `0x${string}` {
