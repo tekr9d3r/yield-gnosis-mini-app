@@ -83,10 +83,9 @@
 			sdk.rpc.profile.getProfileByAddress(m.member as `0x${string}`)
 				.then(p => {
 					if (!p) return;
-					const pAny = p as unknown as Record<string, unknown>;
-					const raw = (pAny.picture ?? pAny.imageUrl ?? null) as string | null;
+					const raw = p.imageUrl ?? p.previewImageUrl ?? null;
 					const imageUrl = raw?.startsWith('ipfs://')
-						? raw.replace('ipfs://', 'https://ipfs.io/ipfs/')
+						? raw.replace('ipfs://', 'https://cloudflare-ipfs.com/ipfs/')
 						: raw ?? undefined;
 					const profile: MemberProfile = { name: p.name ?? undefined, imageUrl };
 					memberProfiles = new Map(memberProfiles).set(m.member.toLowerCase(), profile);

@@ -44,10 +44,10 @@
 		]);
 		if (prof.status === 'fulfilled' && prof.value) {
 			profileName = prof.value.name ?? undefined;
-			const p = prof.value as unknown as Record<string, unknown>;
-			const raw = (p.picture ?? p.imageUrl ?? null) as string | null;
+			const p = prof.value;
+			const raw = p.imageUrl ?? p.previewImageUrl ?? null;
 			profileImageUrl = raw?.startsWith('ipfs://')
-				? raw.replace('ipfs://', 'https://ipfs.io/ipfs/')
+				? raw.replace('ipfs://', 'https://cloudflare-ipfs.com/ipfs/')
 				: raw ?? undefined;
 		}
 		if (trusted.status === 'fulfilled') trustCount = trusted.value.length;
