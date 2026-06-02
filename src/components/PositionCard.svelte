@@ -34,8 +34,8 @@
 		const perSec = base * (apy / 100) / (365 * 24 * 3600);
 		const t0     = Date.now();
 		const id     = setInterval(() => {
-			live = base + perSec * ((Date.now() - t0) / 1000) * 6000;
-		}, 80);
+			live = base + perSec * ((Date.now() - t0) / 1000);
+		}, 1000);
 		return () => clearInterval(id);
 	});
 
