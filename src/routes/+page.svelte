@@ -107,6 +107,10 @@
 
 	onMount(() => {
 		inMiniapp = isMiniappMode();
+		if (!inMiniapp) {
+			window.location.replace('https://circles.gnosis.io/miniapps/yield-gnosis');
+			return;
+		}
 		if (inMiniapp) {
 			onWalletChange(async (addr) => {
 				if (!addr) { phase = 'idle'; address = null; return; }
