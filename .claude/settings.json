@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "additionalDirectories": [
+      "/Users/miha/Code/Gnosis App/CirclesMiniapps/src/routes/apps/yield-gnosis"
+    ],
+    "allow": [
+      "Bash(npx svelte-check *)"
+    ]
+  }
+}

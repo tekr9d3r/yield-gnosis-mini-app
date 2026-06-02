@@ -4,30 +4,31 @@
 	import { Sdk } from '@aboutcircles/sdk';
 	import { fetchAllBalances } from '$lib/balances.js';
 	import { fetchAaveApys, type PoolData } from '$lib/defilama.js';
+	import { fetchTokenPrices } from '$lib/prices.js';
 	import { getATokenAddress, getATokenBalance } from '$lib/aave.js';
-	import type { AppPhase, AssetInfo } from '$lib/types.js';
-	import AssetTable from '../components/AssetTable.svelte';
-	import DepositedTable from '../components/DepositedTable.svelte';
-	import DepositCard from '../components/DepositCard.svelte';
-	import LiveCounter from '../components/LiveCounter.svelte';
-	import WalletSheet from '../components/WalletSheet.svelte';
-	import TipJar from '../components/TipJar.svelte';
-	import YieldPotCard from '../components/YieldPotCard.svelte';
+	import type { AssetInfo } from '$lib/types.js';
+	import HeroCard      from '../components/HeroCard.svelte';
+	import PositionCard  from '../components/PositionCard.svelte';
+	import TokenLogo     from '../components/TokenLogo.svelte';
+	import WalletSheet   from '../components/WalletSheet.svelte';
+	import TipJar        from '../components/TipJar.svelte';
+	import YieldPotCard  from '../components/YieldPotCard.svelte';
 	import YieldPotSheet from '../components/YieldPotSheet.svelte';
 
-	let phase         = $state<AppPhase>('idle');
+	type Phase = 'idle' | 'loading' | 'ready';
+	let phase         = $state<Phase>('idle');
 	let inMiniapp     = $state(false);
 	let address       = $state<`0x${string}` | null>(null);
 	let assets        = $state<AssetInfo[]>([]);
-	let selectedAsset = $state<AssetInfo | null>(null);
-	let walletOpen       = $state(false);
-	let yieldPotOpen     = $state(false);
+	let usdToEur      = $state(0.92);
+	let walletOpen    = $state(false);
+	let yieldPotOpen  = $state(false);
+	let crcBalance    = $state(0);
 
 	// Circles identity
 	let profileName     = $state<string | undefined>(undefined);
 	let profileImageUrl = $state<string | undefined>(undefined);
 	let trustCount      = $state(0);
-	let crcBalance      = $state(0);
 
 	let _sdk: Sdk | null = null;
 	function getSdk(): Sdk {
@@ -44,14 +45,14 @@
 		]);
 		if (prof.status === 'fulfilled' && prof.value) {
 			profileName = prof.value.name ?? undefined;
-			const p = prof.value;
+			const p   = prof.value;
 			const raw = p.imageUrl ?? p.previewImageUrl ?? null;
 			profileImageUrl = raw?.startsWith('ipfs://')
 				? raw.replace('ipfs://', 'https://cloudflare-ipfs.com/ipfs/')
 				: raw ?? undefined;
 		}
 		if (trusted.status === 'fulfilled') trustCount = trusted.value.length;
-		if (bal.status === 'fulfilled')     crcBalance = Number(bal.value) / 1e18;
+		if (bal.status    === 'fulfilled') crcBalance  = Number(bal.value) / 1e18;
 	}
 
 	let _loadId = 0;
@@ -60,25 +61,19 @@
 		const id = ++_loadId;
 		phase = 'loading';
 
-		// Balances + APYs in parallel
-		const [balancesResult, apysResult] = await Promise.allSettled([
+		const [balancesResult, apysResult, pricesResult] = await Promise.allSettled([
 			fetchAllBalances(addr),
-			fetchAaveApys()
+			fetchAaveApys(),
+			fetchTokenPrices()
 		]);
 
 		if (id !== _loadId) return;
 
-		let list: AssetInfo[] = balancesResult.status === 'fulfilled'
-			? balancesResult.value
-			: [];
-
+		let list: AssetInfo[] = balancesResult.status === 'fulfilled' ? balancesResult.value : [];
 		const apyMap = apysResult.status === 'fulfilled' ? apysResult.value : new Map<string, PoolData>();
+		if (pricesResult.status === 'fulfilled') usdToEur = pricesResult.value.usdToEur;
 
-		// aToken addresses in parallel with APY application
-		const aTokenResults = await Promise.allSettled(
-			list.map(a => getATokenAddress(a.address))
-		);
-
+		const aTokenResults = await Promise.allSettled(list.map(a => getATokenAddress(a.address)));
 		if (id !== _loadId) return;
 
 		list = list.map((a, i) => {
@@ -94,14 +89,9 @@
 			};
 		});
 
-		// Deposited (aToken) balances in parallel
 		const depositedResults = await Promise.allSettled(
-			list.map(a => a.aTokenAddress
-				? getATokenBalance(addr, a.aTokenAddress)
-				: Promise.resolve(0n)
-			)
+			list.map(a => a.aTokenAddress ? getATokenBalance(addr, a.aTokenAddress) : Promise.resolve(0n))
 		);
-
 		if (id !== _loadId) return;
 
 		list = list.map((a, i) => ({
@@ -112,34 +102,7 @@
 		}));
 
 		assets = list;
-		phase  = 'table';
-	}
-
-	async function handleEarn(asset: AssetInfo) {
-		if (!address || !asset.aTokenAddress) return;
-
-		selectedAsset = asset;
-
-		// Check if user already has deposits for this asset
-		const deposited = await getATokenBalance(address, asset.aTokenAddress);
-		if (deposited > 0n) {
-			phase = 'deposited';
-		} else {
-			phase = 'deposit';
-		}
-	}
-
-	function handleDeposited() {
-		if (address && selectedAsset) {
-			// Refresh assets in background, go straight to counter
-			phase = 'deposited';
-			loadData(address);
-		}
-	}
-
-	function backToTable() {
-		selectedAsset = null;
-		phase = 'table';
+		phase  = 'ready';
 	}
 
 	onMount(() => {
@@ -154,169 +117,179 @@
 		}
 	});
 
-	// Keep selectedAsset in sync with latest asset data
-	$effect(() => {
-		if (selectedAsset) {
-			const updated = assets.find(a => a.id === selectedAsset!.id);
-			if (updated) selectedAsset = updated;
-		}
-	});
+	// Position assets: EURe and USDC.e
+	const positions = $derived(assets.filter(a => ['EURe', 'USDC.e'].includes(a.symbol)));
+
+	// Wallet asset list: all assets
+	const walletAssets = $derived(assets.map(a => ({
+		...a,
+		walletAmt: Number(a.balance) / 10 ** a.decimals,
+		eurVal:    a.symbol === 'EURe'
+			? Number(a.balance) / 10 ** a.decimals
+			: (Number(a.balance) / 10 ** a.decimals) * usdToEur
+	})));
+
+	function eurRateFor(a: AssetInfo): number {
+		return a.symbol === 'EURe' ? 1.0 : usdToEur;
+	}
+
+	// Short address helper
+	function short(addr: string) { return `${addr.slice(0, 6)}…${addr.slice(-4)}`; }
 </script>
 
 <svelte:head>
 	<title>Yield · Aave v3</title>
 </svelte:head>
 
-<main class="min-h-screen px-4 py-6" style="background-color: var(--bg);">
+<main class="min-h-screen py-6" style="background-color:var(--bg);">
 	<div class="mx-auto w-full max-w-md">
 
-		<!-- Header -->
-		<header class="mb-6 flex items-center justify-between">
-			<div>
-				<h1 class="text-xl font-black" style="color: var(--text)">Yield</h1>
-				<p class="flex items-center gap-1 text-xs" style="color: var(--text-muted)">Earn on <img src="/img/aave-aave-logo.png" alt="Aave" class="h-3 w-3" />Aave v3 · Gnosis Chain</p>
+		{#if phase === 'idle' && !inMiniapp}
+			<!-- Connect notice -->
+			<div class="flex flex-col items-center gap-6 py-24 px-4 text-center">
+				<div class="flex h-16 w-16 items-center justify-center rounded-full" style="background:var(--card);border:var(--card-border);box-shadow:var(--shadow);">
+					<span class="text-2xl">✦</span>
+				</div>
+				<div>
+					<p class="mb-2 text-base font-bold" style="color:var(--text);">Open in Circles</p>
+					<p class="max-w-xs text-sm" style="color:var(--text-muted);">
+						This app runs inside the Circles or Gnosis app. Open it there to connect your wallet and start earning.
+					</p>
+				</div>
 			</div>
 
-			{#if address}
+		{:else if phase === 'loading' || (phase === 'idle' && inMiniapp)}
+			<!-- Loading spinner -->
+			<div class="flex flex-col items-center gap-4 py-24 text-center">
+				<div class="h-10 w-10 animate-spin rounded-full border-2 border-transparent"
+					style="border-top-color:var(--accent);border-right-color:var(--accent);"></div>
+				<p class="text-sm" style="color:var(--text-muted);">
+					{phase === 'idle' ? 'Connecting wallet…' : 'Loading balances…'}
+				</p>
+			</div>
+
+		{:else if phase === 'ready' && address}
+			<!-- ── Header ── -->
+			<header class="mb-5 flex items-center justify-between px-4">
+				<div>
+					<h1 class="text-[26px] font-black leading-none" style="color:var(--text);letter-spacing:-0.03em;">Yield</h1>
+					<div class="mt-1.5 flex items-center gap-1.5 text-[12.5px] font-medium" style="color:var(--text-muted);">
+						<svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+							<path d="M8 1.5l5 2v4c0 3.2-2.1 5.4-5 6.5C5.1 12.9 3 10.7 3 7.5v-4l5-2z" stroke="var(--yield)" stroke-width="1.5" stroke-linejoin="round"/>
+							<path d="M5.8 8l1.5 1.6L10.4 6.3" stroke="var(--yield)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+						</svg>
+						<span>Aave v3 · Gnosis Chain</span>
+					</div>
+				</div>
+
 				<button
 					onclick={() => (walletOpen = true)}
 					class="flex items-center gap-2 rounded-full py-1 pl-1 pr-3 transition-all active:scale-95"
-					style="background: var(--surface); border: 1px solid var(--border)"
+					style="background:var(--card);border:var(--card-border);box-shadow:var(--shadow);"
 				>
 					{#if profileImageUrl}
-						<img src={profileImageUrl} alt="" class="h-7 w-7 rounded-full object-cover" style="border: 1.5px solid var(--green)" />
+						<img src={profileImageUrl} alt="" class="h-7 w-7 rounded-full object-cover" style="border:1.5px solid var(--yield);" />
 					{:else}
-						<div class="flex h-7 w-7 items-center justify-center rounded-full" style="background: var(--blue); border: 1.5px solid var(--green)">
-							<span class="text-[10px] font-black text-white">{(profileName || address).slice(0, 2).toUpperCase()}</span>
+						<div class="flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-black text-white"
+							style="background:var(--accent);border:1.5px solid var(--yield);">
+							{(profileName || address).slice(0, 2).toUpperCase()}
 						</div>
 					{/if}
-					<div class="h-1.5 w-1.5 rounded-full" style="background: var(--green)"></div>
-					<span class="font-mono text-xs font-semibold" style="color: var(--text-muted)">{address.slice(0,6)}…{address.slice(-4)}</span>
+					<span class="pulse-dot inline-block rounded-full" style="width:7px;height:7px;background:var(--yield);"></span>
+					<span class="tnum text-[12.5px] font-semibold" style="color:var(--text-muted);">{short(address)}</span>
 				</button>
-			{/if}
-		</header>
+			</header>
 
-		<!-- Phases -->
-		{#if phase === 'idle' || phase === 'loading'}
-			{#if phase === 'idle' && !inMiniapp}
-				<div class="flex flex-col items-center gap-6 py-24 text-center">
-					<div class="flex h-16 w-16 items-center justify-center rounded-full" style="background: var(--surface); border: 1.5px solid var(--border)">
-						<span class="text-2xl">✦</span>
-					</div>
-					<div>
-						<p class="mb-2 text-base font-bold" style="color: var(--text)">Open in Circles</p>
-						<p class="max-w-xs text-sm" style="color: var(--text-muted)">
-							This app runs inside the Circles or Gnosis app. Open it there to connect your wallet and start earning.
-						</p>
-					</div>
-				</div>
-			{:else}
-				<div class="flex flex-col items-center gap-4 py-24 text-center">
-					<div class="relative">
-						<div
-							class="h-12 w-12 animate-spin rounded-full border-2 border-transparent"
-							style="border-top-color: var(--blue); border-right-color: var(--blue)"
-						></div>
-						<span class="sparkle absolute -right-1 -top-1 text-xs" style="color: var(--orange)">✦</span>
-					</div>
-					<p class="text-sm" style="color: var(--text-muted)">
-						{phase === 'idle' ? 'Connecting wallet…' : 'Loading balances…'}
-					</p>
-				</div>
-			{/if}
+			<!-- ── Hero total balance ── -->
+			<HeroCard {assets} {usdToEur} />
 
-		{:else if phase === 'table'}
-			<DepositedTable
-				{assets}
-				address={address!}
-				onWithdrawDone={() => loadData(address!)}
-				onDeposited={() => loadData(address!)}
-			/>
-			<div class="my-4 border-t" style="border-color: var(--border)"></div>
-			<AssetTable {assets} address={address!} onDeposited={() => loadData(address!)} {crcBalance} />
-
-			<!-- YieldPot CTA -->
-			<div class="mt-4">
-				<YieldPotCard address={address!} onOpen={() => (yieldPotOpen = true)} />
+			<!-- ── Position cards ── -->
+			<div class="mb-4 flex gap-2.5 px-4">
+				{#each positions as asset (asset.id)}
+					<PositionCard
+						{asset}
+						{address}
+						eurRate={eurRateFor(asset)}
+						onChanged={() => loadData(address!)}
+					/>
+				{/each}
 			</div>
 
-		{:else if phase === 'deposit' && selectedAsset && address}
-			<DepositCard
-				{address}
-				asset={selectedAsset}
-				onDeposited={handleDeposited}
-				onBack={backToTable}
-			/>
-
-		{:else if phase === 'deposited' && selectedAsset && address}
-			<LiveCounter {address} asset={selectedAsset} />
-
-			<div class="mt-3 flex flex-col gap-2">
-				<button
-					onclick={() => { if (selectedAsset) phase = 'deposit'; }}
-					class="w-full rounded-2xl py-3.5 text-sm font-semibold transition-all active:scale-95"
-					style="background: var(--surface); border: 1.5px solid var(--border); color: var(--text-muted)"
-					onmouseenter={(e) => { e.currentTarget.style.borderColor = 'var(--blue)'; e.currentTarget.style.color = 'var(--blue)'; }}
-					onmouseleave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
-				>
-					Deposit More {selectedAsset.symbol}
-				</button>
-				<button
-					onclick={backToTable}
-					class="text-xs transition-opacity hover:opacity-60"
-					style="color: var(--text-dim)"
-				>
-					← All assets
-				</button>
+			<!-- ── Wallet asset list ── -->
+			<div class="mb-4 px-4">
+				<div class="mb-2 flex justify-between px-1 text-[11.5px] font-black uppercase tracking-widest" style="color:var(--text-dim);">
+					<span>Wallet</span><span>Balance</span>
+				</div>
+				<div class="overflow-hidden rounded-[var(--r-lg)]" style="background:var(--card);border:var(--card-border);box-shadow:var(--shadow);">
+					{#each walletAssets as a, i (a.id)}
+						<div class="flex items-center px-4 py-3.5" style="border-top:{i ? 'var(--row-sep)' : 'none'};">
+							<!-- Token logo -->
+							<div class="mr-3">
+								<TokenLogo symbol={a.symbol} logoUrl={a.logoUrl} size={36} />
+							</div>
+							<div class="flex-1">
+								<div class="text-[15px] font-bold leading-tight" style="color:var(--text);">{a.symbol}</div>
+								<div class="text-[12px] font-medium" style="color:var(--text-muted);">
+									{a.symbol === 'EURe' ? 'Euro' : a.symbol === 'USDC.e' ? 'USD Coin' : 'Circles'}
+								</div>
+							</div>
+							<div class="text-right">
+								<div class="tnum text-[15px] font-bold" style="color:var(--text);">
+									{a.walletAmt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+								</div>
+								{#if a.symbol !== 'CRC' && a.eurVal > 0}
+									<div class="tnum text-[11.5px]" style="color:var(--text-dim);">≈€{a.eurVal.toFixed(2)}</div>
+								{/if}
+							</div>
+						</div>
+					{/each}
+					<!-- CRC balance from Circles -->
+					{#if crcBalance > 0}
+						<div class="flex items-center px-4 py-3.5" style="border-top:var(--row-sep);">
+							<div class="mr-3"><TokenLogo symbol="CRC" logoUrl="/img/crc-logo.webp" size={36} /></div>
+							<div class="flex-1">
+								<div class="text-[15px] font-bold leading-tight" style="color:var(--text);">CRC</div>
+								<div class="text-[12px] font-medium" style="color:var(--text-muted);">Circles</div>
+							</div>
+							<div class="tnum text-right text-[15px] font-bold" style="color:var(--text);">
+								{crcBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+							</div>
+						</div>
+					{/if}
+				</div>
 			</div>
-		{/if}
 
-		<!-- Footer + Tip -->
-		<footer
-			class="mt-8 rounded-2xl p-4"
-			style="background: var(--surface); border: 1px solid var(--border); box-shadow: 0 2px 8px rgba(55,55,200,0.06)"
-		>
-			<!-- Builder row -->
-			<div class="flex items-center gap-3">
-				<img
-					src="/tekr0x-avatar.jpg"
-					alt="Tekr0x.eth"
-					class="h-9 w-9 shrink-0 rounded-full object-cover"
-					style="border: 2px solid var(--blue)"
-				/>
-				<div class="min-w-0 flex-1">
-					<p class="text-sm font-bold" style="color: var(--text)">Tekr0x.eth</p>
-					<a
-						href="https://x.com/tekr0x"
-						target="_blank"
-						rel="noopener noreferrer"
-						class="text-xs transition-colors"
-						style="color: var(--text-dim)"
-						onmouseenter={(e) => (e.currentTarget.style.color = 'var(--blue)')}
-						onmouseleave={(e) => (e.currentTarget.style.color = 'var(--text-dim)')}
-					>
-						@tekr0x on X ↗
+			<!-- ── Yield Pot CTA ── -->
+			<div class="mb-4 px-4">
+				<YieldPotCard address={address} onOpen={() => (yieldPotOpen = true)} />
+			</div>
+
+			<!-- ── Builder / tip footer ── -->
+			<div class="mx-4 mb-8 overflow-hidden rounded-[var(--r-lg)] p-4"
+				style="background:var(--card);border:var(--card-border);box-shadow:var(--shadow);">
+				<!-- Builder row -->
+				<div class="flex items-center gap-3">
+					<img src="/tekr0x-avatar.jpg" alt="Tekr0x.eth"
+						class="h-10 w-10 shrink-0 rounded-full object-cover"
+						style="border:2px solid var(--accent);" />
+					<div class="flex-1">
+						<p class="text-[15px] font-bold leading-tight" style="color:var(--text);">Tekr0x.eth</p>
+						<a href="https://x.com/tekr0x" target="_blank" rel="noopener noreferrer"
+							class="text-[12px] font-medium" style="color:var(--text-muted);">@tekr0x on X ↗</a>
+					</div>
+					<a href="https://app.gnosis.io/p/0x15BE89708053Cbc405F29095ECf803D51b5812C7"
+						target="_blank" rel="noopener noreferrer"
+						class="shrink-0 rounded-[var(--r-md)] px-3 py-2 text-[13px] font-bold text-white"
+						style="background:var(--accent);box-shadow:var(--accent-shadow);">
+						Join my circle ✦
 					</a>
 				</div>
-				<a
-					href="https://app.gnosis.io/p/0x15BE89708053Cbc405F29095ECf803D51b5812C7"
-					target="_blank"
-					rel="noopener noreferrer"
-					class="shrink-0 rounded-xl px-3 py-2 text-xs font-bold text-white transition-all active:scale-95"
-					style="background: var(--blue); box-shadow: 0 4px 12px var(--blue-shadow)"
-					onmouseenter={(e) => (e.currentTarget.style.background = 'var(--blue-hover)')}
-					onmouseleave={(e) => (e.currentTarget.style.background = 'var(--blue)')}
-				>
-					Join my circle ✦
-				</a>
+				<!-- Tip jar -->
+				<div class="mt-4 border-t pt-4" style="border-color:var(--border);">
+					<TipJar {address} />
+				</div>
 			</div>
-
-			{#if phase === 'table' && address}
-				<!-- Divider -->
-				<div class="my-4 border-t" style="border-color: var(--border)"></div>
-				<TipJar {address} />
-			{/if}
-		</footer>
+		{/if}
 
 	</div>
 </main>
