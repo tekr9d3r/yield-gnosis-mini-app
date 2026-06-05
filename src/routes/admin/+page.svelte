@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { isMiniappMode, onWalletChange, sendTransactions } from '@aboutcircles/miniapp-sdk';
-	import { CIRCLES_HUB_V2, YIELDPOT_GROUP, encodeGroupMint, encodeTrust } from '$lib/chains.js';
+	import { CIRCLES_HUB_V2, YIELDPOT_GROUP, encodeGroupMint, encodeTrust, encodeSetApprovalForAll } from '$lib/chains.js';
 
 	const ADMIN_ADDRESS = '0x15BE89708053Cbc405F29095ECf803D51b5812C7' as const;
 
@@ -19,6 +19,11 @@
 	let trustState  = $state<'idle' | 'sending' | 'success' | 'error'>('idle');
 	let trustHash   = $state('');
 	let trustErr    = $state('');
+
+	// Approval state
+	let approvalState = $state<'idle' | 'sending' | 'success' | 'error'>('idle');
+	let approvalHash  = $state('');
+	let approvalErr   = $state('');
 
 	onMount(() => {
 		if (!isMiniappMode()) return;
@@ -47,6 +52,24 @@
 		} catch (e: unknown) {
 			mintErr   = e instanceof Error ? e.message : 'Transaction rejected';
 			mintState = 'error';
+		}
+	}
+
+	async function approve() {
+		if (!address || !isAdmin || approvalState === 'sending') return;
+		approvalState = 'sending';
+		approvalErr   = '';
+		approvalHash  = '';
+		try {
+			const result = await sendTransactions([{
+				to:   CIRCLES_HUB_V2,
+				data: encodeSetApprovalForAll(YIELDPOT_GROUP, true)
+			}]);
+			approvalHash  = (result as { hash?: string })?.hash ?? '';
+			approvalState = 'success';
+		} catch (e: unknown) {
+			approvalErr   = e instanceof Error ? e.message : 'Transaction rejected';
+			approvalState = 'error';
 		}
 	}
 
@@ -134,6 +157,38 @@
 				{/if}
 				{#if trustState === 'error' && trustErr}
 					<p class="mt-3 text-xs" style="color:#f87171;">{trustErr}</p>
+				{/if}
+			</div>
+
+			<!-- Approval section -->
+			<div class="mb-4 rounded-lg p-5" style="background:#1c1c1c;border:1px solid #2a2a2a;">
+				<h2 class="mb-1 text-sm font-bold" style="color:#a78bfa;">Approve Group Operator</h2>
+				<p class="mb-4 text-xs" style="color:#6b7280;">
+					Calls <code>setApprovalForAll(YIELDPOT_GROUP, true)</code> on Hub V2 from your Safe.<br/>
+					Grants the group contract permission to move your CRC tokens — likely required before groupMint succeeds.
+				</p>
+
+				<div class="mb-4">
+					<p class="mb-1 text-xs" style="color:#9ca3af;">Operator (group address)</p>
+					<p class="break-all text-xs" style="color:#6b7280;">{YIELDPOT_GROUP}</p>
+				</div>
+
+				<button
+					onclick={approve}
+					disabled={approvalState === 'sending'}
+					class="w-full rounded py-2.5 text-sm font-bold disabled:opacity-50"
+					style="background:#065f46;color:#fff;"
+				>
+					{approvalState === 'sending' ? 'Approving…' : 'Approve operator'}
+				</button>
+
+				{#if approvalState === 'success'}
+					<p class="mt-3 text-xs" style="color:#34d399;">
+						✓ Approved{approvalHash ? ` · ${approvalHash.slice(0, 10)}…` : ''}
+					</p>
+				{/if}
+				{#if approvalState === 'error' && approvalErr}
+					<p class="mt-3 text-xs" style="color:#f87171;">{approvalErr}</p>
 				{/if}
 			</div>
 

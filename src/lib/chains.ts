@@ -62,6 +62,16 @@ const CIRCLES_HUB_V2_ABI = [
 		],
 		outputs: []
 	},
+	{
+		name: 'setApprovalForAll',
+		type: 'function',
+		stateMutability: 'nonpayable',
+		inputs: [
+			{ name: 'operator', type: 'address' },
+			{ name: 'approved', type: 'bool'    }
+		],
+		outputs: []
+	},
 ] as const;
 
 export async function getPersonalCrcBalance(address: `0x${string}`): Promise<number> {
@@ -88,6 +98,14 @@ export function encodeTrust(receiver: `0x${string}`): `0x${string}` {
 		abi: CIRCLES_HUB_V2_ABI,
 		functionName: 'trust',
 		args: [receiver, BigInt('0xFFFFFFFFFFFFFFFFFFFFFFFF')]
+	});
+}
+
+export function encodeSetApprovalForAll(operator: `0x${string}`, approved: boolean): `0x${string}` {
+	return encodeFunctionData({
+		abi: CIRCLES_HUB_V2_ABI,
+		functionName: 'setApprovalForAll',
+		args: [operator, approved]
 	});
 }
 
