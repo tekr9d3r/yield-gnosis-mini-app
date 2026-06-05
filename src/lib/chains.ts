@@ -129,6 +129,73 @@ export function encodeCirclesTip(from: `0x${string}`, tokenId: bigint, staticAmo
 	});
 }
 
+export const BALANCER_VAULT    = '0xBA12222222228d8Ba445958a75a0704d566BF2C8' as const;
+export const SYIELDPOT_ADDRESS = '0x7b9f2c39eb73752d83a3cd2421a65e102e1919cd' as const;
+export const YIELDPOT_POOL_ID  = '0x6ab0a7cb5cc84420914f772200b921d57d6c7de00020000000000000000047a' as const;
+
+const BALANCER_VAULT_ABI = [
+	{
+		name: 'swap',
+		type: 'function',
+		stateMutability: 'payable',
+		inputs: [
+			{
+				name: 'singleSwap', type: 'tuple',
+				components: [
+					{ name: 'poolId',   type: 'bytes32' },
+					{ name: 'kind',     type: 'uint8'   },
+					{ name: 'assetIn',  type: 'address' },
+					{ name: 'assetOut', type: 'address' },
+					{ name: 'amount',   type: 'uint256' },
+					{ name: 'userData', type: 'bytes'   }
+				]
+			},
+			{
+				name: 'funds', type: 'tuple',
+				components: [
+					{ name: 'sender',              type: 'address' },
+					{ name: 'fromInternalBalance', type: 'bool'    },
+					{ name: 'recipient',           type: 'address' },
+					{ name: 'toInternalBalance',   type: 'bool'    }
+				]
+			},
+			{ name: 'limit',    type: 'uint256' },
+			{ name: 'deadline', type: 'uint256' }
+		],
+		outputs: [{ name: 'amountCalculated', type: 'uint256' }]
+	}
+] as const;
+
+export function encodeBalancerSwap(
+	assetIn: `0x${string}`,
+	assetOut: `0x${string}`,
+	amount: bigint,
+	address: `0x${string}`
+): `0x${string}` {
+	return encodeFunctionData({
+		abi: BALANCER_VAULT_ABI,
+		functionName: 'swap',
+		args: [
+			{
+				poolId:   YIELDPOT_POOL_ID,
+				kind:     0,
+				assetIn,
+				assetOut,
+				amount,
+				userData: '0x'
+			},
+			{
+				sender:              address,
+				fromInternalBalance: false,
+				recipient:           address,
+				toInternalBalance:   false
+			},
+			0n,
+			BigInt(Math.floor(Date.now() / 1000) + 3600)
+		]
+	});
+}
+
 export const ERC20_ABI = [
 	{
 		name: 'balanceOf',
