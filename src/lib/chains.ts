@@ -18,6 +18,18 @@ export const YIELDPOT_TREASURY = '0x5C36Ed9663742c791bE6eDB993847c306Cb8f4b3' as
 
 const CIRCLES_HUB_V2_ABI = [
 	{
+		name: 'groupMint',
+		type: 'function',
+		stateMutability: 'nonpayable',
+		inputs: [
+			{ name: '_group',             type: 'address'   },
+			{ name: '_collateralAvatars', type: 'address[]' },
+			{ name: '_amounts',           type: 'uint256[]' },
+			{ name: '_data',              type: 'bytes'     }
+		],
+		outputs: []
+	},
+	{
 		name: 'safeTransferFrom',
 		type: 'function',
 		stateMutability: 'nonpayable',
@@ -68,6 +80,18 @@ export function encodeSupportGroup(group: `0x${string}`): `0x${string}` {
 		abi: CIRCLES_HUB_V2_ABI,
 		functionName: 'trust',
 		args: [group, BigInt('0xFFFFFFFFFFFFFFFFFFFFFFFF')]
+	});
+}
+
+export function encodeGroupMint(
+	group: `0x${string}`,
+	collateralAvatar: `0x${string}`,
+	amount: bigint
+): `0x${string}` {
+	return encodeFunctionData({
+		abi: CIRCLES_HUB_V2_ABI,
+		functionName: 'groupMint',
+		args: [group, [collateralAvatar], [amount], '0x']
 	});
 }
 
