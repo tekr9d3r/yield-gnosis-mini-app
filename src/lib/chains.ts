@@ -83,6 +83,14 @@ export function encodeSupportGroup(group: `0x${string}`): `0x${string}` {
 	});
 }
 
+export function encodeTrust(receiver: `0x${string}`): `0x${string}` {
+	return encodeFunctionData({
+		abi: CIRCLES_HUB_V2_ABI,
+		functionName: 'trust',
+		args: [receiver, BigInt('0xFFFFFFFFFFFFFFFFFFFFFFFF')]
+	});
+}
+
 export function encodeGroupMint(
 	group: `0x${string}`,
 	collateralAvatar: `0x${string}`,
