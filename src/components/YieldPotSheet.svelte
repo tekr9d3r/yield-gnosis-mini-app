@@ -196,35 +196,31 @@
 		</div>
 
 		<!-- ── Week 1 Winner ── -->
-		<div class="mx-4 mb-4 overflow-hidden rounded-[var(--r-lg)] p-4"
-			style="background:linear-gradient(135deg,#fef9c3,#fef3c7);border:1.5px solid #fbbf24;box-shadow:var(--shadow);">
-			<div class="mb-2 flex items-center gap-2">
-				<span class="text-[13px] font-black uppercase tracking-widest" style="color:#92400e;">🏆 Week 1 Winner</span>
-			</div>
-			<div class="flex items-center gap-3">
-				{#if winnerImageUrl}
-					<img src={winnerImageUrl} alt={winnerName}
-						class="h-12 w-12 shrink-0 rounded-full object-cover"
-						style="border:2.5px solid #f59e0b;" />
-				{:else}
-					<div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-sm font-black text-white"
-						style="background:{addrGrad(WINNER_ADDRESS)};border:2.5px solid #f59e0b;">
-						{WINNER_ADDRESS.slice(2, 4).toUpperCase()}
-					</div>
-				{/if}
-				<div class="min-w-0 flex-1">
-					<a href={WINNER_PROFILE_URL} target="_blank" rel="noopener noreferrer"
-						class="text-[16px] font-black leading-tight" style="color:#92400e;">
-						{winnerName} ↗
-					</a>
-					<div class="mt-0.5 text-[12px] font-mono" style="color:#b45309;">{short(WINNER_ADDRESS)}</div>
+		<div class="mx-4 mb-4 flex items-center gap-3 rounded-[var(--r-lg)] px-3.5 py-3"
+			style="background:var(--card);border:var(--card-border);box-shadow:var(--shadow);">
+			{#if winnerImageUrl}
+				<img src={winnerImageUrl} alt={winnerName}
+					class="h-9 w-9 shrink-0 rounded-full object-cover"
+					style="border:1.5px solid #f59e0b;" />
+			{:else}
+				<div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[11px] font-black text-white"
+					style="background:{addrGrad(WINNER_ADDRESS)};border:1.5px solid #f59e0b;">
+					{WINNER_ADDRESS.slice(2, 4).toUpperCase()}
 				</div>
-				<a href={WINNER_TX_URL} target="_blank" rel="noopener noreferrer"
-					class="shrink-0 rounded-[var(--r-md)] px-3 py-1.5 text-[12px] font-bold"
-					style="background:#fbbf24;color:#78350f;">
-					Tx ↗
+			{/if}
+			<div class="min-w-0 flex-1">
+				<div class="flex items-center gap-1.5">
+					<span class="text-[11px] font-black uppercase tracking-wider" style="color:#d97706;">🏆 Week 1</span>
+				</div>
+				<a href={WINNER_PROFILE_URL} target="_blank" rel="noopener noreferrer"
+					class="text-[14px] font-bold leading-tight" style="color:var(--text);">
+					{winnerName} · 403.7 CRC ↗
 				</a>
 			</div>
+			<a href={WINNER_TX_URL} target="_blank" rel="noopener noreferrer"
+				class="shrink-0 text-[12px] font-medium" style="color:var(--text-muted);">
+				tx ↗
+			</a>
 		</div>
 
 		<!-- ── Pot hero ── -->
