@@ -20,7 +20,7 @@
 	let winnerImageUrl = $state<string | undefined>(undefined);
 
 	// Week 2: starts June 7 2026 00:00 UTC, runs 7 days
-	const WEEK2_START_TS = 1749254400;
+	const WEEK2_START_TS = 1780790400; // 2026-06-07 00:00:00 UTC
 	const WEEK2_END_TS   = WEEK2_START_TS + 7 * 24 * 3600;
 
 	type ContributorRow  = { member: string; timestamp: number; amount: number };
@@ -121,16 +121,14 @@
 
 	async function load() {
 		status = 'loading';
-		const [contributorsRes, treasuryRes] = await Promise.allSettled([
-			fetchContributors(),
-			rpcCall('circles_getTokenBalances', [YIELDPOT_TREASURY])
+		const [contributorsRes] = await Promise.allSettled([
+			fetchContributors()
 		]);
 
-		if (contributorsRes.status === 'fulfilled') members = contributorsRes.value;
-		if (treasuryRes.status === 'fulfilled') {
-			type T = { circles: number };
-			const tokens: T[] = treasuryRes.value ?? [];
-			treasuryCrc = tokens.reduce((s, t) => s + t.circles, 0);
+		if (contributorsRes.status === 'fulfilled') {
+			members = contributorsRes.value;
+			// Pot = sum of Week 2 contributions only
+			treasuryCrc = members.reduce((s, m) => s + m.amount, 0);
 		}
 
 		status = 'ready';
