@@ -3,9 +3,13 @@
 	import { isMiniappMode, onWalletChange, sendTransactions } from '@aboutcircles/miniapp-sdk';
 	import {
 		CIRCLES_HUB_V2, YIELDPOT_GROUP, YIELDPOT_TREASURY,
+		EURE_ADDRESS, USDC_E_ADDRESS, WBTC_ADDRESS,
+		COW_SETTLEMENT, COW_VAULT_RELAYER,
 		encodeGroupMint, encodeTrust, encodeSetApprovalForAll,
 		getTreasuryNonce, computeSafeTxHash, encodeApproveHash,
 		encodeExecWithApprovedHash, encodeHubBatchTransfer,
+		encodeCoWPresign, hashCoWOrder, computeCoWOrderUid, encodeERC20Approve,
+		type CoWOrderFields,
 		publicClient
 	} from '$lib/chains.js';
 
@@ -119,6 +123,139 @@
 			transferErr   = e instanceof Error ? e.message : 'Transaction rejected';
 			transferState = 'error';
 		}
+	}
+
+	// CoW Swap test state
+	type CoWQuoteResp = {
+		sellToken: string; buyToken: string; receiver: string | null;
+		sellAmount: string; buyAmount: string; validTo: number;
+		appData: string; feeAmount: string; kind: string;
+		partiallyFillable: boolean; sellTokenBalance: string; buyTokenBalance: string;
+	};
+	let cowSellToken  = $state<'EURe' | 'USDC.e'>('EURe');
+	let cowSellAmt    = $state('1');
+	let cowQuote      = $state<CoWQuoteResp | null>(null);
+	let cowQuoteId    = $state<number | null>(null);
+	let cowState      = $state<'idle' | 'quoting' | 'quoted' | 'swapping' | 'polling' | 'done' | 'error'>('idle');
+	let cowOrderUid   = $state('');
+	let cowErr        = $state('');
+
+	const COW_API = 'https://api.cow.fi/xdai/api/v1';
+
+	async function getCoWQuote() {
+		if (!address || cowState === 'quoting') return;
+		cowState = 'quoting'; cowErr = ''; cowQuote = null; cowQuoteId = null;
+		try {
+			const sellTokenAddr = cowSellToken === 'EURe' ? EURE_ADDRESS : USDC_E_ADDRESS;
+			const decimals      = cowSellToken === 'EURe' ? 18 : 6;
+			const parsed        = parseFloat(cowSellAmt);
+			if (!parsed || parsed <= 0) throw new Error('Invalid amount');
+			const sellAmountBeforeFee = BigInt(Math.floor(parsed * 10 ** decimals)).toString();
+
+			const resp = await fetch(`${COW_API}/quote`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					sellToken: sellTokenAddr,
+					buyToken:  WBTC_ADDRESS,
+					sellAmountBeforeFee,
+					from:      address,
+					receiver:  address,
+					validFor:  1800,
+					appData:   '0x0000000000000000000000000000000000000000000000000000000000000000',
+					kind:      'sell'
+				})
+			});
+			if (!resp.ok) throw new Error(await resp.text());
+			const data = await resp.json();
+			cowQuote   = data.quote as CoWQuoteResp;
+			cowQuoteId = data.id ?? null;
+			cowState   = 'quoted';
+		} catch (e: unknown) {
+			cowErr   = e instanceof Error ? e.message : 'Quote failed';
+			cowState = 'error';
+		}
+	}
+
+	async function cowSwap() {
+		if (!address || !isAdmin || !cowQuote || cowState === 'swapping') return;
+		cowState = 'swapping'; cowErr = ''; cowOrderUid = '';
+		try {
+			const q = cowQuote;
+			const order: CoWOrderFields = {
+				sellToken:         q.sellToken as `0x${string}`,
+				buyToken:          q.buyToken  as `0x${string}`,
+				receiver:          (q.receiver ?? address) as `0x${string}`,
+				sellAmount:        BigInt(q.sellAmount),
+				buyAmount:         BigInt(q.buyAmount),
+				validTo:           q.validTo,
+				appData:           q.appData as `0x${string}`,
+				feeAmount:         BigInt(q.feeAmount),
+				kind:              q.kind,
+				partiallyFillable: q.partiallyFillable,
+				sellTokenBalance:  q.sellTokenBalance,
+				buyTokenBalance:   q.buyTokenBalance
+			};
+
+			const orderHash = hashCoWOrder(order);
+			const orderUid  = computeCoWOrderUid(orderHash, address, order.validTo);
+
+			const sellTokenAddr  = cowSellToken === 'EURe' ? EURE_ADDRESS : USDC_E_ADDRESS;
+			const approveAmount  = order.sellAmount + order.feeAmount;
+
+			await sendTransactions([
+				{ to: sellTokenAddr,   data: encodeERC20Approve(COW_VAULT_RELAYER, approveAmount) },
+				{ to: COW_SETTLEMENT,  data: encodeCoWPresign(orderUid) }
+			]);
+
+			const postResp = await fetch(`${COW_API}/orders`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					sellToken:         order.sellToken,
+					buyToken:          order.buyToken,
+					receiver:          order.receiver,
+					sellAmount:        order.sellAmount.toString(),
+					buyAmount:         order.buyAmount.toString(),
+					validTo:           order.validTo,
+					appData:           order.appData,
+					feeAmount:         order.feeAmount.toString(),
+					kind:              order.kind,
+					partiallyFillable: order.partiallyFillable,
+					sellTokenBalance:  order.sellTokenBalance,
+					buyTokenBalance:   order.buyTokenBalance,
+					signingScheme:     'presign',
+					signature:         address,
+					from:              address,
+					...(cowQuoteId !== null ? { quoteId: cowQuoteId } : {})
+				})
+			});
+			if (!postResp.ok) throw new Error(await postResp.text());
+
+			const uid   = await postResp.json() as string;
+			cowOrderUid = uid;
+			cowState    = 'polling';
+			pollCoWOrder(uid);
+		} catch (e: unknown) {
+			cowErr   = e instanceof Error ? e.message : 'Swap failed';
+			cowState = 'error';
+		}
+	}
+
+	async function pollCoWOrder(uid: string) {
+		for (let i = 0; i < 100; i++) {
+			await new Promise(r => setTimeout(r, 3000));
+			try {
+				const r = await fetch(`${COW_API}/orders/${encodeURIComponent(uid)}`);
+				if (!r.ok) continue;
+				const d = await r.json();
+				if (d.status === 'fulfilled') { cowState = 'done'; return; }
+				if (d.status === 'cancelled' || d.status === 'expired') {
+					cowErr = `Order ${d.status}`; cowState = 'error'; return;
+				}
+			} catch { /* keep polling */ }
+		}
+		cowErr = 'Order timed out'; cowState = 'error';
 	}
 
 	onMount(() => {
@@ -352,6 +489,100 @@
 				{/if}
 				{#if transferState === 'error' && transferErr}
 					<p class="mt-3 text-xs" style="color:#f87171;">{transferErr}</p>
+				{/if}
+			</div>
+
+			<!-- CoW Swap Test -->
+			<div class="mb-4 rounded-lg p-5" style="background:#1c1c1c;border:1px solid #2a2a2a;">
+				<h2 class="mb-1 text-sm font-bold" style="color:#a78bfa;">CoW Swap Test</h2>
+				<p class="mb-4 text-xs" style="color:#6b7280;">
+					Swap EURe or USDC.e → WBTC via CoW Protocol (presign flow).
+				</p>
+
+				<!-- Sell token toggle -->
+				<div class="mb-3 flex gap-2">
+					{#each (['EURe', 'USDC.e'] as const) as tok}
+						<button
+							onclick={() => { cowSellToken = tok; cowQuote = null; cowState = 'idle'; }}
+							class="rounded px-3 py-1 text-xs font-bold"
+							style="background:{cowSellToken === tok ? '#312e81' : '#111'};
+							       color:{cowSellToken === tok ? '#a78bfa' : '#6b7280'};
+							       border:1px solid {cowSellToken === tok ? '#4c1d95' : '#333'};"
+						>{tok}</button>
+					{/each}
+				</div>
+
+				<!-- Amount input -->
+				<div class="mb-4">
+					<p class="mb-1 text-xs" style="color:#9ca3af;">Sell amount ({cowSellToken})</p>
+					<input
+						type="number" min="0.000001" step="any"
+						bind:value={cowSellAmt}
+						disabled={cowState === 'quoting' || cowState === 'swapping'}
+						class="w-full rounded px-3 py-2 text-xs disabled:opacity-50"
+						style="background:#111;border:1px solid #333;color:#e5e5e5;outline:none;"
+					/>
+				</div>
+
+				<button
+					onclick={getCoWQuote}
+					disabled={cowState === 'quoting' || cowState === 'swapping' || cowState === 'polling'}
+					class="mb-4 w-full rounded py-2 text-xs font-bold disabled:opacity-50"
+					style="background:#1e293b;color:#94a3b8;border:1px solid #334155;"
+				>
+					{cowState === 'quoting' ? 'Getting quote…' : 'Get Quote'}
+				</button>
+
+				{#if cowQuote}
+					<div class="mb-4 rounded p-3" style="background:#111;border:1px solid #1e293b;">
+						<div class="flex justify-between text-xs">
+							<span style="color:#9ca3af;">Receive (WBTC)</span>
+							<span style="color:#e5e5e5;" class="font-mono">
+								{(Number(cowQuote.buyAmount) / 1e8).toFixed(8)}
+							</span>
+						</div>
+						<div class="mt-1 flex justify-between text-xs">
+							<span style="color:#9ca3af;">Fee ({cowSellToken})</span>
+							<span style="color:#6b7280;" class="font-mono">
+								{(Number(cowQuote.feeAmount) / (cowSellToken === 'EURe' ? 1e18 : 1e6)).toFixed(4)}
+							</span>
+						</div>
+						<div class="mt-1 flex justify-between text-xs">
+							<span style="color:#9ca3af;">Valid until</span>
+							<span style="color:#6b7280;">{new Date(cowQuote.validTo * 1000).toLocaleTimeString()}</span>
+						</div>
+					</div>
+
+					<button
+						onclick={cowSwap}
+						disabled={cowState === 'swapping' || cowState === 'polling' || cowState === 'done'}
+						class="w-full rounded py-2.5 text-sm font-bold disabled:opacity-50"
+						style="background:#7c2d12;color:#fff;"
+					>
+						{cowState === 'swapping' ? 'Approving + Presigning…' : 'Swap →'}
+					</button>
+				{/if}
+
+				{#if cowOrderUid}
+					<div class="mt-3 rounded p-3" style="background:#111;border:1px solid #1e293b;">
+						<p class="mb-1 text-xs font-bold" style="color:#9ca3af;">Order UID</p>
+						<p class="break-all font-mono text-[10px]" style="color:#6b7280;">{cowOrderUid}</p>
+						<p class="mt-2 text-xs">
+							Status:
+							<span class="font-bold" style="color:{cowState === 'done' ? '#34d399' : cowState === 'error' ? '#f87171' : '#fbbf24'};">
+								{cowState === 'done' ? '✓ Fulfilled' : cowState === 'error' ? '✗ ' + cowErr : '⏳ Open…'}
+							</span>
+						</p>
+						<a
+							href="https://explorer.cow.fi/gc/orders/{cowOrderUid}"
+							target="_blank" rel="noopener noreferrer"
+							class="mt-1 block text-xs" style="color:#6b7280;"
+						>View on CoW Explorer ↗</a>
+					</div>
+				{/if}
+
+				{#if cowState === 'error' && !cowOrderUid}
+					<p class="mt-3 text-xs" style="color:#f87171;">{cowErr}</p>
 				{/if}
 			</div>
 

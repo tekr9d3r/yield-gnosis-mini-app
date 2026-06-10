@@ -1,4 +1,4 @@
-import { createPublicClient, encodeFunctionData, fallback, hashTypedData, http } from 'viem';
+import { createPublicClient, encodeFunctionData, encodePacked, fallback, hashTypedData, http } from 'viem';
 import { gnosis } from 'viem/chains';
 
 export const publicClient = createPublicClient({
@@ -10,11 +10,101 @@ export const publicClient = createPublicClient({
 });
 
 export const EURE_ADDRESS         = '0xcb444e90d8198415266c6a2724b7900fb12fc56e' as const;
+export const USDC_E_ADDRESS       = '0x2a22f9c3b484c3629090feed35f17ff8f88f76f0' as const;
 export const AAVE_POOL            = '0xb50201558B00496A145fE76f7424749556E326D8' as const;
 export const CIRCLES_HUB_V2       = '0xc12C1E50ABB450d6205Ea2C3Fa861b3B834d13e8' as const;
 export const TIP_RECIPIENT        = '0x15BE89708053Cbc405F29095ECf803D51b5812C7' as const;
 export const YIELDPOT_GROUP    = '0xA7b485Eae7EC8793f29C1ebb268455705c5B67AF' as const;
 export const YIELDPOT_TREASURY = '0x5C36Ed9663742c791bE6eDB993847c306Cb8f4b3' as const;
+
+// ── CoW Protocol ─────────────────────────────────────────────────────────────
+export const COW_SETTLEMENT    = '0x9008D19f58AAbD9eD0D60971565AA8510560ab41' as const;
+export const COW_VAULT_RELAYER = '0xC92E8bdf79f0507f65a392b0ab4667716BFE0110' as const;
+export const WBTC_ADDRESS      = '0x8e5bbbb09ed1ebde8674cda39a0c169401db4252' as const;
+
+const COW_SETTLEMENT_ABI = [{
+	name: 'setPreSignature',
+	type: 'function',
+	stateMutability: 'nonpayable',
+	inputs: [
+		{ name: 'orderUid', type: 'bytes' },
+		{ name: 'signed',   type: 'bool'  }
+	],
+	outputs: []
+}] as const;
+
+export interface CoWOrderFields {
+	sellToken:         `0x${string}`;
+	buyToken:          `0x${string}`;
+	receiver:          `0x${string}`;
+	sellAmount:        bigint;
+	buyAmount:         bigint;
+	validTo:           number;
+	appData:           `0x${string}`;
+	feeAmount:         bigint;
+	kind:              string;
+	partiallyFillable: boolean;
+	sellTokenBalance:  string;
+	buyTokenBalance:   string;
+}
+
+export function encodeCoWPresign(orderUid: `0x${string}`): `0x${string}` {
+	return encodeFunctionData({
+		abi: COW_SETTLEMENT_ABI,
+		functionName: 'setPreSignature',
+		args: [orderUid, true]
+	});
+}
+
+export function hashCoWOrder(order: CoWOrderFields): `0x${string}` {
+	return hashTypedData({
+		domain: {
+			name: 'Gnosis Protocol',
+			version: 'v2',
+			chainId: 100,
+			verifyingContract: COW_SETTLEMENT
+		},
+		types: {
+			Order: [
+				{ name: 'sellToken',        type: 'address' },
+				{ name: 'buyToken',         type: 'address' },
+				{ name: 'receiver',         type: 'address' },
+				{ name: 'sellAmount',       type: 'uint256' },
+				{ name: 'buyAmount',        type: 'uint256' },
+				{ name: 'validTo',          type: 'uint32'  },
+				{ name: 'appData',          type: 'bytes32' },
+				{ name: 'feeAmount',        type: 'uint256' },
+				{ name: 'orderKind',        type: 'string'  },
+				{ name: 'partiallyFillable',type: 'bool'    },
+				{ name: 'sellTokenBalance', type: 'string'  },
+				{ name: 'buyTokenBalance',  type: 'string'  }
+			]
+		},
+		primaryType: 'Order',
+		message: {
+			sellToken:         order.sellToken,
+			buyToken:          order.buyToken,
+			receiver:          order.receiver,
+			sellAmount:        order.sellAmount,
+			buyAmount:         order.buyAmount,
+			validTo:           order.validTo,
+			appData:           order.appData,
+			feeAmount:         order.feeAmount,
+			orderKind:         order.kind,
+			partiallyFillable: order.partiallyFillable,
+			sellTokenBalance:  order.sellTokenBalance,
+			buyTokenBalance:   order.buyTokenBalance
+		}
+	});
+}
+
+export function computeCoWOrderUid(
+	orderHash: `0x${string}`,
+	owner: `0x${string}`,
+	validTo: number
+): `0x${string}` {
+	return encodePacked(['bytes32', 'address', 'uint32'], [orderHash, owner, validTo]);
+}
 
 const CIRCLES_HUB_V2_ABI = [
 	{
@@ -407,3 +497,7 @@ export const AAVE_POOL_ABI = [
 		]
 	}
 ] as const;
+
+export function encodeERC20Approve(spender: `0x${string}`, amount: bigint): `0x${string}` {
+	return encodeFunctionData({ abi: ERC20_ABI, functionName: 'approve', args: [spender, amount] });
+}
