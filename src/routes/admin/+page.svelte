@@ -182,15 +182,17 @@
 		cowState = 'swapping'; cowErr = ''; cowOrderUid = '';
 		try {
 			const q = cowQuote;
+			// CoW now requires feeAmount=0; fold old fee into sellAmount
+			const fullSellAmount = BigInt(q.sellAmount) + BigInt(q.feeAmount);
 			const order: CoWOrderFields = {
 				sellToken:         q.sellToken as `0x${string}`,
 				buyToken:          q.buyToken  as `0x${string}`,
 				receiver:          (q.receiver ?? address) as `0x${string}`,
-				sellAmount:        BigInt(q.sellAmount),
+				sellAmount:        fullSellAmount,
 				buyAmount:         BigInt(q.buyAmount),
 				validTo:           q.validTo,
 				appData:           q.appData as `0x${string}`,
-				feeAmount:         BigInt(q.feeAmount),
+				feeAmount:         0n,
 				kind:              q.kind,
 				partiallyFillable: q.partiallyFillable,
 				sellTokenBalance:  q.sellTokenBalance,
@@ -201,7 +203,7 @@
 			const orderUid  = computeCoWOrderUid(orderHash, address, order.validTo);
 
 			const sellTokenAddr  = cowSellToken === 'EURe' ? EURE_ADDRESS : USDC_E_ADDRESS;
-			const approveAmount  = order.sellAmount + order.feeAmount;
+			const approveAmount  = fullSellAmount;
 
 			await sendTransactions([
 				{ to: sellTokenAddr,   data: encodeERC20Approve(COW_VAULT_RELAYER, approveAmount) },
@@ -219,7 +221,7 @@
 					buyAmount:         order.buyAmount.toString(),
 					validTo:           order.validTo,
 					appData:           order.appData,
-					feeAmount:         order.feeAmount.toString(),
+					feeAmount:         '0',
 					kind:              order.kind,
 					partiallyFillable: order.partiallyFillable,
 					sellTokenBalance:  order.sellTokenBalance,
