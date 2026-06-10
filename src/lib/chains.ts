@@ -1,4 +1,4 @@
-import { createPublicClient, encodeFunctionData, fallback, http } from 'viem';
+import { createPublicClient, encodeFunctionData, fallback, hashTypedData, http } from 'viem';
 import { gnosis } from 'viem/chains';
 
 export const publicClient = createPublicClient({
@@ -72,7 +72,130 @@ const CIRCLES_HUB_V2_ABI = [
 		],
 		outputs: []
 	},
+	{
+		name: 'safeBatchTransferFrom',
+		type: 'function',
+		stateMutability: 'nonpayable',
+		inputs: [
+			{ name: '_from',   type: 'address'   },
+			{ name: '_to',     type: 'address'   },
+			{ name: '_ids',    type: 'uint256[]' },
+			{ name: '_values', type: 'uint256[]' },
+			{ name: '_data',   type: 'bytes'     }
+		],
+		outputs: []
+	},
 ] as const;
+
+// ── Gnosis Safe ──────────────────────────────────────────────────────────────
+
+const SAFE_ABI = [
+	{
+		name: 'nonce',
+		type: 'function',
+		stateMutability: 'view',
+		inputs: [],
+		outputs: [{ name: '', type: 'uint256' }]
+	},
+	{
+		name: 'approveHash',
+		type: 'function',
+		stateMutability: 'nonpayable',
+		inputs: [{ name: 'hashToApprove', type: 'bytes32' }],
+		outputs: []
+	},
+	{
+		name: 'execTransaction',
+		type: 'function',
+		stateMutability: 'payable',
+		inputs: [
+			{ name: 'to',             type: 'address' },
+			{ name: 'value',          type: 'uint256' },
+			{ name: 'data',           type: 'bytes'   },
+			{ name: 'operation',      type: 'uint8'   },
+			{ name: 'safeTxGas',      type: 'uint256' },
+			{ name: 'baseGas',        type: 'uint256' },
+			{ name: 'gasPrice',       type: 'uint256' },
+			{ name: 'gasToken',       type: 'address' },
+			{ name: 'refundReceiver', type: 'address' },
+			{ name: 'signatures',     type: 'bytes'   }
+		],
+		outputs: [{ name: 'success', type: 'bool' }]
+	},
+] as const;
+
+const ZERO_ADDR = '0x0000000000000000000000000000000000000000' as const;
+
+export async function getTreasuryNonce(safeAddress: `0x${string}`): Promise<bigint> {
+	return publicClient.readContract({ address: safeAddress, abi: SAFE_ABI, functionName: 'nonce' });
+}
+
+export function computeSafeTxHash(
+	safeAddress: `0x${string}`,
+	to: `0x${string}`,
+	data: `0x${string}`,
+	nonce: bigint
+): `0x${string}` {
+	return hashTypedData({
+		domain: { chainId: 100, verifyingContract: safeAddress },
+		types: {
+			SafeTx: [
+				{ name: 'to',             type: 'address' },
+				{ name: 'value',          type: 'uint256' },
+				{ name: 'data',           type: 'bytes'   },
+				{ name: 'operation',      type: 'uint8'   },
+				{ name: 'safeTxGas',      type: 'uint256' },
+				{ name: 'baseGas',        type: 'uint256' },
+				{ name: 'gasPrice',       type: 'uint256' },
+				{ name: 'gasToken',       type: 'address' },
+				{ name: 'refundReceiver', type: 'address' },
+				{ name: 'nonce',          type: 'uint256' },
+			]
+		},
+		primaryType: 'SafeTx',
+		message: {
+			to, value: 0n, data, operation: 0,
+			safeTxGas: 0n, baseGas: 0n, gasPrice: 0n,
+			gasToken: ZERO_ADDR, refundReceiver: ZERO_ADDR,
+			nonce
+		}
+	});
+}
+
+export function encodeApproveHash(hash: `0x${string}`): `0x${string}` {
+	return encodeFunctionData({ abi: SAFE_ABI, functionName: 'approveHash', args: [hash] });
+}
+
+export function encodeExecWithApprovedHash(
+	to: `0x${string}`,
+	data: `0x${string}`,
+	approver: `0x${string}`
+): `0x${string}` {
+	// Pre-approved hash signature format: r=approver (32 bytes), s=0 (32 bytes), v=1
+	const sig = (`0x` +
+		approver.slice(2).toLowerCase().padStart(64, '0') +
+		'0'.repeat(64) +
+		'01'
+	) as `0x${string}`;
+	return encodeFunctionData({
+		abi: SAFE_ABI,
+		functionName: 'execTransaction',
+		args: [to, 0n, data, 0, 0n, 0n, 0n, ZERO_ADDR, ZERO_ADDR, sig]
+	});
+}
+
+export function encodeHubBatchTransfer(
+	from: `0x${string}`,
+	to: `0x${string}`,
+	ids: bigint[],
+	values: bigint[]
+): `0x${string}` {
+	return encodeFunctionData({
+		abi: CIRCLES_HUB_V2_ABI,
+		functionName: 'safeBatchTransferFrom',
+		args: [from, to, ids, values, '0x']
+	});
+}
 
 export async function getPersonalCrcBalance(address: `0x${string}`): Promise<number> {
 	const raw = await publicClient.readContract({

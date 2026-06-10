@@ -1,7 +1,12 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { isMiniappMode, onWalletChange, sendTransactions } from '@aboutcircles/miniapp-sdk';
-	import { CIRCLES_HUB_V2, YIELDPOT_GROUP, encodeGroupMint, encodeTrust, encodeSetApprovalForAll } from '$lib/chains.js';
+	import {
+		CIRCLES_HUB_V2, YIELDPOT_GROUP, YIELDPOT_TREASURY,
+		encodeGroupMint, encodeTrust, encodeSetApprovalForAll,
+		getTreasuryNonce, computeSafeTxHash, encodeApproveHash,
+		encodeExecWithApprovedHash, encodeHubBatchTransfer
+	} from '$lib/chains.js';
 
 	const ADMIN_ADDRESS = '0x15BE89708053Cbc405F29095ECf803D51b5812C7' as const;
 
@@ -24,6 +29,93 @@
 	let approvalState = $state<'idle' | 'sending' | 'success' | 'error'>('idle');
 	let approvalHash  = $state('');
 	let approvalErr   = $state('');
+
+	// Transfer state
+	type Holding = { id: bigint; amount: bigint; label: string };
+	let transferRecipient = $state('');
+	let transferState     = $state<'idle' | 'loading' | 'sending' | 'success' | 'error'>('idle');
+	let transferErr       = $state('');
+	let transferHash      = $state('');
+	let holdings          = $state<Holding[]>([]);
+	let holdingsLoaded    = $state(false);
+
+	async function loadHoldings() {
+		transferState = 'loading';
+		try {
+			// Fetch all incoming transfers to treasury
+			const inUrl = `https://gnosis.blockscout.com/api/v2/addresses/${YIELDPOT_TREASURY}/token-transfers?type=ERC-1155&filter=to`;
+			const outUrl = `https://gnosis.blockscout.com/api/v2/addresses/${YIELDPOT_TREASURY}/token-transfers?type=ERC-1155&filter=from`;
+
+			async function fetchAll(url: string) {
+				const items: { total: { token_id: string; value: string } }[] = [];
+				let next: string | null = url;
+				while (next) {
+					const r = await fetch(next);
+					const d = await r.json();
+					if (d.items) items.push(...d.items);
+					next = d.next_page_params
+						? url + '&' + new URLSearchParams(d.next_page_params)
+						: null;
+				}
+				return items;
+			}
+
+			const [ins, outs] = await Promise.all([fetchAll(inUrl), fetchAll(outUrl)]);
+
+			const net = new Map<string, bigint>();
+			for (const item of ins) {
+				const id = item.total.token_id;
+				net.set(id, (net.get(id) ?? 0n) + BigInt(item.total.value));
+			}
+			for (const item of outs) {
+				const id = item.total.token_id;
+				net.set(id, (net.get(id) ?? 0n) - BigInt(item.total.value));
+			}
+
+			holdings = [...net.entries()]
+				.filter(([, v]) => v > 0n)
+				.map(([id, amount]) => {
+					const addr = '0x' + BigInt(id).toString(16).padStart(40, '0');
+					return { id: BigInt(id), amount, label: addr.slice(0, 6) + '…' + addr.slice(-4) };
+				});
+
+			holdingsLoaded = true;
+			transferState  = 'idle';
+		} catch (e: unknown) {
+			transferErr   = e instanceof Error ? e.message : 'Failed to load';
+			transferState = 'error';
+		}
+	}
+
+	async function transferAll() {
+		if (!address || !isAdmin || transferState === 'sending') return;
+		const recipient = transferRecipient.trim() as `0x${string}`;
+		if (!recipient.startsWith('0x') || recipient.length !== 42) {
+			transferErr = 'Invalid recipient address'; transferState = 'error'; return;
+		}
+		if (holdings.length === 0) {
+			transferErr = 'No CRC to transfer'; transferState = 'error'; return;
+		}
+		transferState = 'sending'; transferErr = ''; transferHash = '';
+		try {
+			const nonce       = await getTreasuryNonce(YIELDPOT_TREASURY);
+			const batchData   = encodeHubBatchTransfer(
+				YIELDPOT_TREASURY, recipient,
+				holdings.map(h => h.id),
+				holdings.map(h => h.amount)
+			);
+			const safeTxHash  = computeSafeTxHash(YIELDPOT_TREASURY, CIRCLES_HUB_V2, batchData, nonce);
+			const result = await sendTransactions([
+				{ to: YIELDPOT_TREASURY, data: encodeApproveHash(safeTxHash) },
+				{ to: YIELDPOT_TREASURY, data: encodeExecWithApprovedHash(CIRCLES_HUB_V2, batchData, address) }
+			]);
+			transferHash  = Array.isArray(result) ? result[0] : (result as { hash?: string })?.hash ?? '';
+			transferState = 'success';
+		} catch (e: unknown) {
+			transferErr   = e instanceof Error ? e.message : 'Transaction rejected';
+			transferState = 'error';
+		}
+	}
 
 	onMount(() => {
 		if (!isMiniappMode()) return;
@@ -189,6 +281,73 @@
 				{/if}
 				{#if approvalState === 'error' && approvalErr}
 					<p class="mt-3 text-xs" style="color:#f87171;">{approvalErr}</p>
+				{/if}
+			</div>
+
+			<!-- Transfer Treasury CRC -->
+			<div class="mb-4 rounded-lg p-5" style="background:#1c1c1c;border:1px solid #2a2a2a;">
+				<h2 class="mb-1 text-sm font-bold" style="color:#a78bfa;">Transfer Treasury CRC</h2>
+				<p class="mb-4 text-xs" style="color:#6b7280;">
+					Sends all CRC held in the treasury Safe to a recipient in one batch transaction.
+				</p>
+
+				<div class="mb-3">
+					<p class="mb-1 text-xs" style="color:#9ca3af;">Treasury</p>
+					<p class="break-all text-xs" style="color:#6b7280;">{YIELDPOT_TREASURY}</p>
+				</div>
+
+				{#if !holdingsLoaded}
+					<button
+						onclick={loadHoldings}
+						disabled={transferState === 'loading'}
+						class="mb-4 w-full rounded py-2 text-xs font-bold disabled:opacity-50"
+						style="background:#1e293b;color:#94a3b8;border:1px solid #334155;"
+					>
+						{transferState === 'loading' ? 'Loading…' : 'Load treasury holdings'}
+					</button>
+				{:else}
+					<div class="mb-4 rounded p-3" style="background:#111;border:1px solid #1e293b;">
+						<p class="mb-1 text-xs font-bold" style="color:#9ca3af;">{holdings.length} token{holdings.length !== 1 ? 's' : ''} in treasury</p>
+						{#each holdings as h}
+							<div class="flex justify-between text-xs" style="color:#6b7280;">
+								<span class="font-mono">{h.label}</span>
+								<span>{(Number(h.amount) / 1e18).toFixed(2)} CRC</span>
+							</div>
+						{/each}
+						{#if holdings.length === 0}
+							<p class="text-xs" style="color:#4b5563;">Treasury is empty</p>
+						{/if}
+					</div>
+				{/if}
+
+				<div class="mb-4">
+					<p class="mb-1 text-xs" style="color:#9ca3af;">Recipient address</p>
+					<input
+						type="text"
+						placeholder="0x…"
+						bind:value={transferRecipient}
+						disabled={transferState === 'sending'}
+						class="w-full rounded px-3 py-2 text-xs disabled:opacity-50"
+						style="background:#111;border:1px solid #333;color:#e5e5e5;outline:none;"
+					/>
+				</div>
+
+				<button
+					onclick={transferAll}
+					disabled={transferState === 'sending' || holdings.length === 0}
+					class="w-full rounded py-2.5 text-sm font-bold disabled:opacity-50"
+					style="background:#b45309;color:#fff;"
+				>
+					{transferState === 'sending' ? 'Sending…' : `Transfer ${holdings.length > 0 ? holdings.length + ' token' + (holdings.length !== 1 ? 's' : '') : 'CRC'} to recipient`}
+				</button>
+
+				{#if transferState === 'success'}
+					<p class="mt-3 text-xs" style="color:#34d399;">
+						✓ Transferred{transferHash ? ` · ${transferHash.slice(0, 10)}…` : ''}
+					</p>
+				{/if}
+				{#if transferState === 'error' && transferErr}
+					<p class="mt-3 text-xs" style="color:#f87171;">{transferErr}</p>
 				{/if}
 			</div>
 
