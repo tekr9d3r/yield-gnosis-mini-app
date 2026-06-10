@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { isMiniappMode, onWalletChange } from '@aboutcircles/miniapp-sdk';
+	import { isMiniappMode, onWalletChange, requestCreateAccount } from '@aboutcircles/miniapp-sdk';
 	import { Sdk } from '@aboutcircles/sdk';
 	import { fetchAllBalances } from '$lib/balances.js';
 	import { fetchAaveApys, type PoolData } from '$lib/defilama.js';
@@ -19,6 +19,9 @@
 	let phase         = $state<Phase>('idle');
 	let inMiniapp     = $state(false);
 	let address       = $state<`0x${string}` | null>(null);
+	let walletChecked = $state(false);
+	let createState   = $state<'idle' | 'creating' | 'error'>('idle');
+	let createErr     = $state('');
 	let assets        = $state<AssetInfo[]>([]);
 	let usdToEur      = $state(0.92);
 	let walletOpen    = $state(false);
@@ -108,13 +111,15 @@
 	onMount(() => {
 		inMiniapp = isMiniappMode();
 		if (!inMiniapp) {
-			window.location.replace('https://circles.gnosis.io/miniapps/yield-gnosis');
+			window.location.replace('https://circles.gnosis.io');
 			return;
 		}
 		if (inMiniapp) {
 			onWalletChange(async (addr) => {
+				walletChecked = true;
 				if (!addr) { phase = 'idle'; address = null; return; }
 				address = addr as `0x${string}`;
+				createState = 'idle';
 				loadProfile(address);
 				await loadData(address);
 			});
@@ -137,6 +142,18 @@
 		return a.symbol === 'EURe' ? 1.0 : usdToEur;
 	}
 
+	async function createAccount() {
+		if (createState === 'creating') return;
+		createState = 'creating'; createErr = '';
+		try {
+			const result = await requestCreateAccount();
+			if (!result.authenticated) throw new Error('Account creation cancelled');
+		} catch (e: unknown) {
+			createErr   = e instanceof Error ? e.message : 'Something went wrong';
+			createState = 'error';
+		}
+	}
+
 	// Short address helper
 	function short(addr: string) { return `${addr.slice(0, 6)}…${addr.slice(-4)}`; }
 </script>
@@ -148,27 +165,55 @@
 <main class="min-h-screen py-6" style="background-color:var(--bg);">
 	<div class="mx-auto w-full max-w-md">
 
-		{#if phase === 'idle' && !inMiniapp}
-			<!-- Connect notice -->
-			<div class="flex flex-col items-center gap-6 py-24 px-4 text-center">
-				<div class="flex h-16 w-16 items-center justify-center rounded-full" style="background:var(--card);border:var(--card-border);box-shadow:var(--shadow);">
-					<span class="text-2xl">✦</span>
+		{#if inMiniapp && walletChecked && !address}
+			<!-- No Circles account -->
+			<div class="flex flex-col items-center gap-8 px-6 py-16">
+				<div class="flex h-20 w-20 items-center justify-center rounded-full"
+					style="background:var(--card);border:var(--card-border);box-shadow:var(--shadow);">
+					<span class="text-4xl">✦</span>
 				</div>
-				<div>
-					<p class="mb-2 text-base font-bold" style="color:var(--text);">Open in Circles</p>
-					<p class="max-w-xs text-sm" style="color:var(--text-muted);">
-						This app runs inside the Circles or Gnosis app. Open it there to connect your wallet and start earning.
+				<div class="text-center">
+					<h1 class="mb-2 text-[26px] font-black leading-tight" style="color:var(--text);letter-spacing:-0.03em;">Welcome to Yield</h1>
+					<p class="text-[14px] leading-relaxed" style="color:var(--text-muted);">
+						Earn yield on your stablecoins and play the weekly CRC lottery — powered by Circles on Gnosis Chain.
+					</p>
+				</div>
+
+				<div class="w-full max-w-xs">
+					<button
+						onclick={createAccount}
+						disabled={createState === 'creating'}
+						class="w-full rounded-[var(--r-lg)] py-4 text-[15px] font-bold text-white disabled:opacity-50 transition-all active:scale-95"
+						style="background:var(--accent);box-shadow:var(--accent-shadow);"
+					>
+						{createState === 'creating' ? 'Opening account setup…' : 'Create Circles Account'}
+					</button>
+
+					{#if createErr}
+						<p class="mt-3 text-center text-[12px]" style="color:#ef4444;">{createErr}</p>
+					{/if}
+
+					<p class="mt-4 text-center text-[12px]" style="color:var(--text-dim);">
+						Free · No gas required · Secured by passkey
+					</p>
+				</div>
+
+				<div class="w-full max-w-xs rounded-[var(--r-lg)] p-4 text-center"
+					style="background:var(--card);border:var(--card-border);">
+					<p class="mb-2 text-[12px] font-semibold" style="color:var(--text-muted);">Already have an account?</p>
+					<p class="text-[12px]" style="color:var(--text-dim);">
+						Connect your wallet in the Circles app and reopen Yield from the miniapps menu.
 					</p>
 				</div>
 			</div>
 
-		{:else if phase === 'loading' || (phase === 'idle' && inMiniapp)}
+		{:else if phase === 'loading' || (inMiniapp && !walletChecked)}
 			<!-- Loading spinner -->
 			<div class="flex flex-col items-center gap-4 py-24 text-center">
 				<div class="h-10 w-10 animate-spin rounded-full border-2 border-transparent"
 					style="border-top-color:var(--accent);border-right-color:var(--accent);"></div>
 				<p class="text-sm" style="color:var(--text-muted);">
-					{phase === 'idle' ? 'Connecting wallet…' : 'Loading balances…'}
+					{!walletChecked ? 'Connecting wallet…' : 'Loading balances…'}
 				</p>
 			</div>
 
