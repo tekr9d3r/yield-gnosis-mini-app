@@ -202,14 +202,7 @@
 			const orderHash = hashCoWOrder(order);
 			const orderUid  = computeCoWOrderUid(orderHash, address, order.validTo);
 
-			const sellTokenAddr  = cowSellToken === 'EURe' ? EURE_ADDRESS : USDC_E_ADDRESS;
-			const approveAmount  = fullSellAmount;
-
-			await sendTransactions([
-				{ to: sellTokenAddr,   data: encodeERC20Approve(COW_VAULT_RELAYER, approveAmount) },
-				{ to: COW_SETTLEMENT,  data: encodeCoWPresign(orderUid) }
-			]);
-
+			// POST order first so CoW starts monitoring for the presign immediately
 			const postResp = await fetch(`${COW_API}/orders`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
@@ -233,6 +226,13 @@
 				})
 			});
 			if (!postResp.ok) throw new Error(await postResp.text());
+
+			// Then approve + presign on-chain; CoW keeps checking until the order expires
+			const sellTokenAddr = cowSellToken === 'EURe' ? EURE_ADDRESS : USDC_E_ADDRESS;
+			await sendTransactions([
+				{ to: sellTokenAddr,  data: encodeERC20Approve(COW_VAULT_RELAYER, fullSellAmount) },
+				{ to: COW_SETTLEMENT, data: encodeCoWPresign(orderUid) }
+			]);
 
 			const uid   = await postResp.json() as string;
 			cowOrderUid = uid;
