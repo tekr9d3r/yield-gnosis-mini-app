@@ -5,7 +5,8 @@
 		CIRCLES_HUB_V2, YIELDPOT_GROUP, YIELDPOT_TREASURY,
 		encodeGroupMint, encodeTrust, encodeSetApprovalForAll,
 		getTreasuryNonce, computeSafeTxHash, encodeApproveHash,
-		encodeExecWithApprovedHash, encodeHubBatchTransfer
+		encodeExecWithApprovedHash, encodeHubBatchTransfer,
+		publicClient
 	} from '$lib/chains.js';
 
 	const ADMIN_ADDRESS = '0x15BE89708053Cbc405F29095ECf803D51b5812C7' as const;
@@ -42,42 +43,45 @@
 	async function loadHoldings() {
 		transferState = 'loading';
 		try {
-			// Fetch all incoming transfers to treasury
-			const inUrl = `https://gnosis.blockscout.com/api/v2/addresses/${YIELDPOT_TREASURY}/token-transfers?type=ERC-1155&filter=to`;
-			const outUrl = `https://gnosis.blockscout.com/api/v2/addresses/${YIELDPOT_TREASURY}/token-transfers?type=ERC-1155&filter=from`;
-
-			async function fetchAll(url: string) {
-				const items: { total: { token_id: string; value: string } }[] = [];
-				let next: string | null = url;
-				while (next) {
-					const r = await fetch(next);
-					const d = await r.json();
-					if (d.items) items.push(...d.items);
-					next = d.next_page_params
-						? url + '&' + new URLSearchParams(d.next_page_params)
-						: null;
-				}
-				return items;
+			// Step 1: get unique token IDs ever sent to the treasury
+			const url = `https://gnosis.blockscout.com/api/v2/addresses/${YIELDPOT_TREASURY}/token-transfers?type=ERC-1155&filter=to`;
+			const items: { total: { token_id: string } }[] = [];
+			let next: string | null = url;
+			while (next) {
+				const r = await fetch(next);
+				const d = await r.json();
+				if (d.items) items.push(...d.items);
+				next = d.next_page_params
+					? url + '&' + new URLSearchParams(d.next_page_params)
+					: null;
 			}
+			const uniqueIds = [...new Set(items.map(i => i.total.token_id))];
 
-			const [ins, outs] = await Promise.all([fetchAll(inUrl), fetchAll(outUrl)]);
+			// Step 2: fetch LIVE balanceOf for each token ID (respects demurrage decay)
+			const HUB_BALANCE_ABI = [{
+				name: 'balanceOf', type: 'function', stateMutability: 'view',
+				inputs: [{ name: 'account', type: 'address' }, { name: 'id', type: 'uint256' }],
+				outputs: [{ name: '', type: 'uint256' }]
+			}] as const;
 
-			const net = new Map<string, bigint>();
-			for (const item of ins) {
-				const id = item.total.token_id;
-				net.set(id, (net.get(id) ?? 0n) + BigInt(item.total.value));
-			}
-			for (const item of outs) {
-				const id = item.total.token_id;
-				net.set(id, (net.get(id) ?? 0n) - BigInt(item.total.value));
-			}
+			const balResults = await Promise.allSettled(
+				uniqueIds.map(id =>
+					publicClient.readContract({
+						address: CIRCLES_HUB_V2,
+						abi: HUB_BALANCE_ABI,
+						functionName: 'balanceOf',
+						args: [YIELDPOT_TREASURY, BigInt(id)]
+					})
+				)
+			);
 
-			holdings = [...net.entries()]
-				.filter(([, v]) => v > 0n)
-				.map(([id, amount]) => {
+			holdings = uniqueIds
+				.map((id, i) => {
+					const bal = balResults[i].status === 'fulfilled' ? balResults[i].value as bigint : 0n;
 					const addr = '0x' + BigInt(id).toString(16).padStart(40, '0');
-					return { id: BigInt(id), amount, label: addr.slice(0, 6) + '…' + addr.slice(-4) };
-				});
+					return { id: BigInt(id), amount: bal, label: addr.slice(0, 6) + '…' + addr.slice(-4) };
+				})
+				.filter(h => h.amount > 0n);
 
 			holdingsLoaded = true;
 			transferState  = 'idle';
