@@ -142,7 +142,7 @@
 	}
 
 	function createAccount() {
-		window.location.href = INVITE_LINK;
+		window.open(INVITE_LINK, '_blank', 'noopener');
 	}
 
 	// Short address helper
