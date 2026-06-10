@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { isMiniappMode, onWalletChange, requestCreateAccount } from '@aboutcircles/miniapp-sdk';
+	import { isMiniappMode, onWalletChange } from '@aboutcircles/miniapp-sdk';
 	import { Sdk } from '@aboutcircles/sdk';
+
+	const INVITE_LINK = 'https://circles.gnosis.io/invitation/R0L994iA';
 	import { fetchAllBalances } from '$lib/balances.js';
 	import { fetchAaveApys, type PoolData } from '$lib/defilama.js';
 	import { fetchTokenPrices } from '$lib/prices.js';
@@ -20,8 +22,6 @@
 	let inMiniapp     = $state(false);
 	let address       = $state<`0x${string}` | null>(null);
 	let walletChecked = $state(false);
-	let createState   = $state<'idle' | 'creating' | 'error'>('idle');
-	let createErr     = $state('');
 	let assets        = $state<AssetInfo[]>([]);
 	let usdToEur      = $state(0.92);
 	let walletOpen    = $state(false);
@@ -119,7 +119,6 @@
 				walletChecked = true;
 				if (!addr) { phase = 'idle'; address = null; return; }
 				address = addr as `0x${string}`;
-				createState = 'idle';
 				loadProfile(address);
 				await loadData(address);
 			});
@@ -142,16 +141,8 @@
 		return a.symbol === 'EURe' ? 1.0 : usdToEur;
 	}
 
-	async function createAccount() {
-		if (createState === 'creating') return;
-		createState = 'creating'; createErr = '';
-		try {
-			const result = await requestCreateAccount();
-			if (!result.authenticated) throw new Error('Account creation cancelled');
-		} catch (e: unknown) {
-			createErr   = e instanceof Error ? e.message : 'Something went wrong';
-			createState = 'error';
-		}
+	function createAccount() {
+		window.location.href = INVITE_LINK;
 	}
 
 	// Short address helper
@@ -182,16 +173,11 @@
 				<div class="w-full max-w-xs">
 					<button
 						onclick={createAccount}
-						disabled={createState === 'creating'}
-						class="w-full rounded-[var(--r-lg)] py-4 text-[15px] font-bold text-white disabled:opacity-50 transition-all active:scale-95"
+						class="w-full rounded-[var(--r-lg)] py-4 text-[15px] font-bold text-white transition-all active:scale-95"
 						style="background:var(--accent);box-shadow:var(--accent-shadow);"
 					>
-						{createState === 'creating' ? 'Opening account setup…' : 'Create Circles Account'}
+						Create Circles Account
 					</button>
-
-					{#if createErr}
-						<p class="mt-3 text-center text-[12px]" style="color:#ef4444;">{createErr}</p>
-					{/if}
 
 					<p class="mt-4 text-center text-[12px]" style="color:var(--text-dim);">
 						Free · No gas required · Secured by passkey
