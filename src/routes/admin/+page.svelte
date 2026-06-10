@@ -199,10 +199,7 @@
 				buyTokenBalance:   q.buyTokenBalance
 			};
 
-			const orderHash = hashCoWOrder(order);
-			const orderUid  = computeCoWOrderUid(orderHash, address, order.validTo);
-
-			// POST order first so CoW starts monitoring for the presign immediately
+			// POST order first — CoW returns its canonical orderUid
 			const postResp = await fetch(`${COW_API}/orders`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
@@ -227,15 +224,15 @@
 			});
 			if (!postResp.ok) throw new Error(await postResp.text());
 
-			// Then approve + presign on-chain; CoW keeps checking until the order expires
+			// Use CoW's returned uid for the presign — eliminates any local hash mismatch
+			const uid = await postResp.json() as string;
+			cowOrderUid = uid;
+
 			const sellTokenAddr = cowSellToken === 'EURe' ? EURE_ADDRESS : USDC_E_ADDRESS;
 			await sendTransactions([
 				{ to: sellTokenAddr,  data: encodeERC20Approve(COW_VAULT_RELAYER, fullSellAmount) },
-				{ to: COW_SETTLEMENT, data: encodeCoWPresign(orderUid) }
+				{ to: COW_SETTLEMENT, data: encodeCoWPresign(uid as `0x${string}`) }
 			]);
-
-			const uid   = await postResp.json() as string;
-			cowOrderUid = uid;
 			cowState    = 'polling';
 			pollCoWOrder(uid);
 		} catch (e: unknown) {
