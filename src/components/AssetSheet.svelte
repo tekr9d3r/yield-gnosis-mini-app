@@ -286,7 +286,7 @@
 		</div>
 
 		<!-- Content (scrollable) -->
-		<div class="overflow-y-auto px-5 pb-8" style="max-height:70vh;">
+		<div class="overflow-y-auto px-5" style="max-height:70dvh;padding-bottom:max(env(safe-area-inset-bottom),32px);">
 
 			<!-- Buy / Sell toggle -->
 			<div class="mb-4 flex overflow-hidden rounded-[var(--r-md)] p-1" style="background:var(--ghost-bg);">

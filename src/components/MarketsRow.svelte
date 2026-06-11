@@ -61,7 +61,7 @@
 	{#each TOKENS as token, i}
 		<button
 			onclick={() => onOpen(token.sym)}
-			class="flex flex-1 flex-col gap-2 rounded-[var(--r-md)] p-3 text-left transition-all active:scale-95"
+			class="flex min-w-0 flex-1 flex-col gap-2 rounded-[var(--r-md)] p-3 text-left transition-all active:scale-95"
 			style="background:var(--card);border:var(--card-border);box-shadow:var(--shadow);animation:floatUp 0.3s ease both;animation-delay:{i * 0.05}s;"
 		>
 			{#if loading && !prices[token.sym]}
@@ -85,11 +85,11 @@
 					</div>
 				</div>
 				<!-- price + change -->
-				<div class="flex items-end gap-1.5">
+				<div class="flex flex-col gap-0.5">
 					{#if prices[token.sym]}
-						<span class="tnum text-[14px] font-bold leading-none" style="color:var(--text);white-space:nowrap;">{fmtPrice(prices[token.sym].eur)}</span>
+						<span class="tnum truncate text-[13.5px] font-bold leading-none" style="color:var(--text);">{fmtPrice(prices[token.sym].eur)}</span>
 						{@const change = prices[token.sym].change}
-						<span class="text-[11px] font-semibold leading-none" style="color:{change >= 0 ? 'var(--yield)' : 'var(--down)'};">
+						<span class="text-[10.5px] font-semibold leading-none" style="color:{change >= 0 ? 'var(--yield)' : 'var(--down)'};">
 							{change >= 0 ? '▲' : '▼'}{Math.abs(change).toFixed(2)}%
 						</span>
 					{:else}

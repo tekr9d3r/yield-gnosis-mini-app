@@ -31,7 +31,7 @@
 			>✕</button>
 		</div>
 
-		<div class="px-5 pb-8">
+		<div class="px-5" style="padding-bottom:max(env(safe-area-inset-bottom),32px);">
 			<!-- Builder row -->
 			<div class="flex items-center gap-3">
 				<img src="/tekr0x-avatar.jpg" alt="Tekr0x.eth"

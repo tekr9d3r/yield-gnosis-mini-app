@@ -172,8 +172,8 @@
 >
 	<!-- Sheet -->
 	<div
-		class="slide-up w-full max-w-md rounded-t-[28px] pb-8"
-		style="background:var(--bg);max-height:92vh;overflow-y:auto;"
+		class="slide-up w-full max-w-md rounded-t-[28px]"
+		style="background:var(--bg);max-height:92dvh;overflow-y:auto;padding-bottom:max(env(safe-area-inset-bottom),32px);"
 		role="dialog"
 		aria-modal="true"
 		tabindex="-1"
