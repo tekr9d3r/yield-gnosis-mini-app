@@ -86,12 +86,12 @@
 <div class="mb-4 flex justify-center">
 	<button
 		onclick={() => (expanded = !expanded)}
-		class="flex items-center gap-1 rounded-full px-4 py-1.5 text-[12px] font-semibold transition-all active:scale-95"
-		style="background:var(--ghost-bg);color:var(--text-muted);border:var(--card-border);"
+		class="flex h-7 w-7 items-center justify-center rounded-full transition-all active:scale-90"
+		style="background:var(--ghost-bg);border:var(--card-border);"
+		aria-label={expanded ? 'Show less' : 'Show more'}
 	>
-		{expanded ? 'Show less' : 'Show more'}
-		<svg width="10" height="10" viewBox="0 0 10 10" fill="none" style="transition:transform 0.2s;transform:rotate({expanded ? 180 : 0}deg);">
-			<path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+		<svg width="12" height="12" viewBox="0 0 12 12" fill="none" style="transition:transform 0.2s;transform:rotate({expanded ? 180 : 0}deg);">
+			<path d="M2.5 4.5L6 8L9.5 4.5" stroke="var(--text-muted)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
 		</svg>
 	</button>
 </div>
