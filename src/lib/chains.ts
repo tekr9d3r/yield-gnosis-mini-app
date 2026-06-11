@@ -23,6 +23,9 @@ export const COW_VAULT_RELAYER = '0xC92E8bdf79f0507f65a392b0ab4667716BFE0110' as
 export const WBTC_ADDRESS      = '0x8e5bbbb09ed1ebde8674cda39a0c169401db4252' as const;
 export const WETH_ADDRESS      = '0x6A023CCd1ff6F2045C3309768eAd9E68F978f6e1' as const;
 export const GNO_ADDRESS       = '0x9C58BAcC331c9aa871AFD802DB6379a98e80CEdb' as const;
+export const XDAI_ADDRESS      = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE' as const; // native xDAI placeholder used by CoW
+export const COW_TOKEN_ADDRESS = '0x177127622c4A00F3d409B75571e12cB3c8973d3c' as const;
+export const AAVE_TOKEN_ADDRESS = '0xDF613aF6B44a31299E48131e9347F034347E2F00' as const;
 
 const COW_SETTLEMENT_ABI = [{
 	name: 'setPreSignature',

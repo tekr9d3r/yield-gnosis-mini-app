@@ -9,7 +9,7 @@
 	import { fetchTokenPrices } from '$lib/prices.js';
 	import { getATokenAddress, getATokenBalance } from '$lib/aave.js';
 	import type { AssetInfo } from '$lib/types.js';
-	import { WBTC_ADDRESS, WETH_ADDRESS, GNO_ADDRESS, ERC20_ABI, publicClient } from '$lib/chains.js';
+	import { WBTC_ADDRESS, WETH_ADDRESS, GNO_ADDRESS, XDAI_ADDRESS, COW_TOKEN_ADDRESS, AAVE_TOKEN_ADDRESS, ERC20_ABI, publicClient } from '$lib/chains.js';
 	import HeroCard      from '../components/HeroCard.svelte';
 	import PositionCard  from '../components/PositionCard.svelte';
 	import TokenLogo     from '../components/TokenLogo.svelte';
@@ -30,11 +30,14 @@
 	let walletOpen    = $state(false);
 	let yieldPotOpen  = $state(false);
 	let crcBalance    = $state(0);
-	let marketAsset   = $state<'BTC' | 'ETH' | 'GNO' | null>(null);
+	let marketAsset   = $state<'BTC' | 'ETH' | 'GNO' | 'XDAI' | 'COW' | 'AAVE' | null>(null);
 	let aboutOpen     = $state(false);
 	let wbtcBalance   = $state(0n);
 	let wethBalance   = $state(0n);
 	let gnoBalance    = $state(0n);
+	let xdaiBalance   = $state(0n);
+	let cowBalance    = $state(0n);
+	let aaveBalance   = $state(0n);
 	let marketPrices  = $state<Record<string, number>>({});
 
 	// Circles identity
@@ -118,14 +121,20 @@
 
 		// Fetch market token balances (non-blocking)
 		Promise.allSettled([
-			publicClient.readContract({ address: WBTC_ADDRESS, abi: ERC20_ABI, functionName: 'balanceOf', args: [addr] }),
-			publicClient.readContract({ address: WETH_ADDRESS, abi: ERC20_ABI, functionName: 'balanceOf', args: [addr] }),
-			publicClient.readContract({ address: GNO_ADDRESS,  abi: ERC20_ABI, functionName: 'balanceOf', args: [addr] }),
-		]).then(([w, e, g]) => {
+			publicClient.readContract({ address: WBTC_ADDRESS,       abi: ERC20_ABI, functionName: 'balanceOf', args: [addr] }),
+			publicClient.readContract({ address: WETH_ADDRESS,       abi: ERC20_ABI, functionName: 'balanceOf', args: [addr] }),
+			publicClient.readContract({ address: GNO_ADDRESS,        abi: ERC20_ABI, functionName: 'balanceOf', args: [addr] }),
+			publicClient.getBalance({ address: addr }),
+			publicClient.readContract({ address: COW_TOKEN_ADDRESS,  abi: ERC20_ABI, functionName: 'balanceOf', args: [addr] }),
+			publicClient.readContract({ address: AAVE_TOKEN_ADDRESS, abi: ERC20_ABI, functionName: 'balanceOf', args: [addr] }),
+		]).then(([w, e, g, x, c, a]) => {
 			if (id !== _loadId) return;
 			if (w.status === 'fulfilled') wbtcBalance = w.value as bigint;
 			if (e.status === 'fulfilled') wethBalance = e.value as bigint;
 			if (g.status === 'fulfilled') gnoBalance  = g.value as bigint;
+			if (x.status === 'fulfilled') xdaiBalance = x.value as bigint;
+			if (c.status === 'fulfilled') cowBalance  = c.value as bigint;
+			if (a.status === 'fulfilled') aaveBalance = a.value as bigint;
 		});
 	}
 
@@ -272,7 +281,7 @@
 			</div>
 
 			<!-- ── Markets row ── -->
-			<MarketsRow address={address} onOpen={(sym) => (marketAsset = sym as 'BTC' | 'ETH' | 'GNO')} onPrices={(p) => (marketPrices = p)} />
+			<MarketsRow address={address} onOpen={(sym) => (marketAsset = sym as typeof marketAsset)} onPrices={(p) => (marketPrices = p)} />
 
 			<!-- ── Wallet asset list ── -->
 			<div class="mb-4 px-4">
@@ -355,6 +364,45 @@
 							</div>
 						</button>
 					{/if}
+					{#if xdaiBalance > 0n}
+						<button class="flex w-full items-center px-4 py-3.5 text-left transition-all active:scale-[0.98]" style="border-top:var(--row-sep);" onclick={() => (marketAsset = 'XDAI')}>
+							<div class="mr-3"><img src="/img/xdai.png" alt="XDAI" width="36" height="36" class="rounded-full" /></div>
+							<div class="flex-1">
+								<div class="text-[15px] font-bold leading-tight" style="color:var(--text);">XDAI</div>
+								<div class="text-[12px] font-medium" style="color:var(--text-muted);">xDAI</div>
+							</div>
+							<div class="text-right">
+								<div class="tnum text-[15px] font-bold" style="color:var(--text);">{(Number(xdaiBalance) / 1e18).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</div>
+								{#if marketPrices.XDAI}<div class="tnum text-[11.5px]" style="color:var(--text-dim);">≈€{((Number(xdaiBalance) / 1e18) * marketPrices.XDAI).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>{/if}
+							</div>
+						</button>
+					{/if}
+					{#if cowBalance > 0n}
+						<button class="flex w-full items-center px-4 py-3.5 text-left transition-all active:scale-[0.98]" style="border-top:var(--row-sep);" onclick={() => (marketAsset = 'COW')}>
+							<div class="mr-3"><img src="/img/cow.png" alt="COW" width="36" height="36" class="rounded-full" /></div>
+							<div class="flex-1">
+								<div class="text-[15px] font-bold leading-tight" style="color:var(--text);">COW</div>
+								<div class="text-[12px] font-medium" style="color:var(--text-muted);">CoW Protocol</div>
+							</div>
+							<div class="text-right">
+								<div class="tnum text-[15px] font-bold" style="color:var(--text);">{(Number(cowBalance) / 1e18).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</div>
+								{#if marketPrices.COW}<div class="tnum text-[11.5px]" style="color:var(--text-dim);">≈€{((Number(cowBalance) / 1e18) * marketPrices.COW).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>{/if}
+							</div>
+						</button>
+					{/if}
+					{#if aaveBalance > 0n}
+						<button class="flex w-full items-center px-4 py-3.5 text-left transition-all active:scale-[0.98]" style="border-top:var(--row-sep);" onclick={() => (marketAsset = 'AAVE')}>
+							<div class="mr-3"><img src="/img/aave.png" alt="AAVE" width="36" height="36" class="rounded-full" /></div>
+							<div class="flex-1">
+								<div class="text-[15px] font-bold leading-tight" style="color:var(--text);">AAVE</div>
+								<div class="text-[12px] font-medium" style="color:var(--text-muted);">Aave</div>
+							</div>
+							<div class="text-right">
+								<div class="tnum text-[15px] font-bold" style="color:var(--text);">{(Number(aaveBalance) / 1e18).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</div>
+								{#if marketPrices.AAVE}<div class="tnum text-[11.5px]" style="color:var(--text-dim);">≈€{((Number(aaveBalance) / 1e18) * marketPrices.AAVE).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>{/if}
+							</div>
+						</button>
+					{/if}
 				</div>
 			</div>
 
@@ -386,7 +434,7 @@
 
 {#if marketAsset && address}
 	<AssetSheet
-		sym={marketAsset as 'BTC' | 'ETH' | 'GNO'}
+		sym={marketAsset as 'BTC' | 'ETH' | 'GNO' | 'XDAI' | 'COW' | 'AAVE'}
 		address={address}
 		eureBalance={assets.find(a => a.symbol === 'EURe')?.balance ?? 0n}
 		onClose={() => (marketAsset = null)}

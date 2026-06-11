@@ -3,6 +3,7 @@
 	import { sendTransactions } from '@aboutcircles/miniapp-sdk';
 	import {
 		EURE_ADDRESS, WBTC_ADDRESS, WETH_ADDRESS, GNO_ADDRESS,
+		XDAI_ADDRESS, COW_TOKEN_ADDRESS, AAVE_TOKEN_ADDRESS,
 		COW_SETTLEMENT, COW_VAULT_RELAYER,
 		encodeCoWPresign, encodeERC20Approve,
 		ERC20_ABI, publicClient,
@@ -10,7 +11,7 @@
 	} from '$lib/chains.js';
 
 	let { sym, address, eureBalance, onClose, onDone }: {
-		sym:          'BTC' | 'ETH' | 'GNO';
+		sym:          'BTC' | 'ETH' | 'GNO' | 'XDAI' | 'COW' | 'AAVE';
 		address:      `0x${string}`;
 		eureBalance:  bigint;
 		onClose:      () => void;
@@ -18,9 +19,12 @@
 	} = $props();
 
 	const TOKEN_CONFIG: Record<string, { name: string; logo: string; address: `0x${string}`; decimals: number }> = {
-		BTC: { name: 'Bitcoin',  logo: '/img/bitcoin.png',  address: WBTC_ADDRESS, decimals: 8  },
-		ETH: { name: 'Ethereum', logo: '/img/ethereum.png', address: WETH_ADDRESS, decimals: 18 },
-		GNO: { name: 'Gnosis',   logo: '/img/gnosis.png',   address: GNO_ADDRESS,  decimals: 18 },
+		BTC:  { name: 'Bitcoin',  logo: '/img/bitcoin.png',  address: WBTC_ADDRESS,      decimals: 8  },
+		ETH:  { name: 'Ethereum', logo: '/img/ethereum.png', address: WETH_ADDRESS,      decimals: 18 },
+		GNO:  { name: 'Gnosis',   logo: '/img/gnosis.png',   address: GNO_ADDRESS,       decimals: 18 },
+		XDAI: { name: 'xDAI',     logo: '/img/xdai.png',     address: XDAI_ADDRESS,      decimals: 18 },
+		COW:  { name: 'CoW',      logo: '/img/cow.png',      address: COW_TOKEN_ADDRESS, decimals: 18 },
+		AAVE: { name: 'Aave',     logo: '/img/aave.png',     address: AAVE_TOKEN_ADDRESS,decimals: 18 },
 	};
 
 	const COW_API = 'https://api.cow.fi/xdai/api/v1';
@@ -158,10 +162,14 @@
 			const uid = await postResp.json() as string;
 			orderUid = uid;
 
-			await sendTransactions([
-				{ to: sellTokenAddr,  data: encodeERC20Approve(COW_VAULT_RELAYER, fullSellAmount) },
-				{ to: COW_SETTLEMENT, data: encodeCoWPresign(uid as `0x${string}`) }
-			]);
+			const isNativeSell = sellTokenAddr.toLowerCase() === XDAI_ADDRESS.toLowerCase();
+			const txs = isNativeSell
+				? [{ to: COW_SETTLEMENT, data: encodeCoWPresign(uid as `0x${string}`) }]
+				: [
+					{ to: sellTokenAddr,  data: encodeERC20Approve(COW_VAULT_RELAYER, fullSellAmount) },
+					{ to: COW_SETTLEMENT, data: encodeCoWPresign(uid as `0x${string}`) }
+				  ];
+			await sendTransactions(txs);
 
 			swapState = 'polling';
 			pollOrder(uid);
@@ -222,17 +230,16 @@
 	onMount(async () => {
 		// Fetch token balance for sell mode
 		try {
-			tokenBal = await publicClient.readContract({
-				address:      cfg.address,
-				abi:          ERC20_ABI,
-				functionName: 'balanceOf',
-				args:         [address]
-			}) as bigint;
+			const isNative = cfg.address.toLowerCase() === XDAI_ADDRESS.toLowerCase();
+			tokenBal = isNative
+				? await publicClient.getBalance({ address })
+				: await publicClient.readContract({ address: cfg.address, abi: ERC20_ABI, functionName: 'balanceOf', args: [address] }) as bigint;
 		} catch { tokenBal = 0n; }
 
 		// Fetch current price for estimate display
 		try {
-			const cgId = sym === 'BTC' ? 'bitcoin' : sym === 'ETH' ? 'ethereum' : 'gnosis';
+			const cgMap: Record<string, string> = { BTC: 'bitcoin', ETH: 'ethereum', GNO: 'gnosis', XDAI: 'xdai', COW: 'cow-protocol', AAVE: 'aave' };
+			const cgId = cgMap[sym] ?? sym.toLowerCase();
 			const r = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${cgId}&vs_currencies=eur&include_24hr_change=true`);
 			if (r.ok) {
 				const d = await r.json();
