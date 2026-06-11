@@ -17,7 +17,7 @@
 	];
 
 	const SECONDARY = [
-		{ sym: 'XDAI', name: 'xDAI',  logo: '/img/xdai.png',  cgId: 'xdai'         },
+		{ sym: 'SDAI', name: 'sDAI',  logo: '/img/sdai.png',  cgId: 'savings-xdai' },
 		{ sym: 'COW',  name: 'CoW',   logo: '/img/cow.png',   cgId: 'cow-protocol' },
 		{ sym: 'AAVE', name: 'Aave',  logo: '/img/aave.png',  cgId: 'aave'         },
 	];
@@ -30,7 +30,7 @@
 
 	async function fetchPrices() {
 		try {
-			const ids = 'bitcoin,ethereum,gnosis,xdai,cow-protocol,aave';
+			const ids = 'bitcoin,ethereum,gnosis,savings-xdai,cow-protocol,aave';
 			const r = await fetch(
 				`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=eur&include_24hr_change=true`
 			);

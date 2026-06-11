@@ -9,7 +9,7 @@
 	import { fetchTokenPrices } from '$lib/prices.js';
 	import { getATokenAddress, getATokenBalance } from '$lib/aave.js';
 	import type { AssetInfo } from '$lib/types.js';
-	import { WBTC_ADDRESS, WETH_ADDRESS, GNO_ADDRESS, XDAI_ADDRESS, COW_TOKEN_ADDRESS, AAVE_TOKEN_ADDRESS, ERC20_ABI, publicClient } from '$lib/chains.js';
+	import { WBTC_ADDRESS, WETH_ADDRESS, GNO_ADDRESS, SDAI_ADDRESS, COW_TOKEN_ADDRESS, AAVE_TOKEN_ADDRESS, ERC20_ABI, publicClient } from '$lib/chains.js';
 	import HeroCard      from '../components/HeroCard.svelte';
 	import PositionCard  from '../components/PositionCard.svelte';
 	import TokenLogo     from '../components/TokenLogo.svelte';
@@ -30,12 +30,12 @@
 	let walletOpen    = $state(false);
 	let yieldPotOpen  = $state(false);
 	let crcBalance    = $state(0);
-	let marketAsset   = $state<'BTC' | 'ETH' | 'GNO' | 'XDAI' | 'COW' | 'AAVE' | null>(null);
+	let marketAsset   = $state<'BTC' | 'ETH' | 'GNO' | 'SDAI' | 'COW' | 'AAVE' | null>(null);
 	let aboutOpen     = $state(false);
 	let wbtcBalance   = $state(0n);
 	let wethBalance   = $state(0n);
 	let gnoBalance    = $state(0n);
-	let xdaiBalance   = $state(0n);
+	let sdaiBalance   = $state(0n);
 	let cowBalance    = $state(0n);
 	let aaveBalance   = $state(0n);
 	let marketPrices  = $state<Record<string, number>>({});
@@ -124,7 +124,7 @@
 			publicClient.readContract({ address: WBTC_ADDRESS,       abi: ERC20_ABI, functionName: 'balanceOf', args: [addr] }),
 			publicClient.readContract({ address: WETH_ADDRESS,       abi: ERC20_ABI, functionName: 'balanceOf', args: [addr] }),
 			publicClient.readContract({ address: GNO_ADDRESS,        abi: ERC20_ABI, functionName: 'balanceOf', args: [addr] }),
-			publicClient.getBalance({ address: addr }),
+			publicClient.readContract({ address: SDAI_ADDRESS,       abi: ERC20_ABI, functionName: 'balanceOf', args: [addr] }),
 			publicClient.readContract({ address: COW_TOKEN_ADDRESS,  abi: ERC20_ABI, functionName: 'balanceOf', args: [addr] }),
 			publicClient.readContract({ address: AAVE_TOKEN_ADDRESS, abi: ERC20_ABI, functionName: 'balanceOf', args: [addr] }),
 		]).then(([w, e, g, x, c, a]) => {
@@ -132,7 +132,7 @@
 			if (w.status === 'fulfilled') wbtcBalance = w.value as bigint;
 			if (e.status === 'fulfilled') wethBalance = e.value as bigint;
 			if (g.status === 'fulfilled') gnoBalance  = g.value as bigint;
-			if (x.status === 'fulfilled') xdaiBalance = x.value as bigint;
+			if (x.status === 'fulfilled') sdaiBalance = x.value as bigint;
 			if (c.status === 'fulfilled') cowBalance  = c.value as bigint;
 			if (a.status === 'fulfilled') aaveBalance = a.value as bigint;
 		});
@@ -364,16 +364,16 @@
 							</div>
 						</button>
 					{/if}
-					{#if xdaiBalance > 0n}
-						<button class="flex w-full items-center px-4 py-3.5 text-left transition-all active:scale-[0.98]" style="border-top:var(--row-sep);" onclick={() => (marketAsset = 'XDAI')}>
-							<div class="mr-3"><img src="/img/xdai.png" alt="XDAI" width="36" height="36" class="rounded-full" /></div>
+					{#if sdaiBalance > 0n}
+						<button class="flex w-full items-center px-4 py-3.5 text-left transition-all active:scale-[0.98]" style="border-top:var(--row-sep);" onclick={() => (marketAsset = 'SDAI')}>
+							<div class="mr-3"><img src="/img/sdai.png" alt="SDAI" width="36" height="36" class="rounded-full" /></div>
 							<div class="flex-1">
-								<div class="text-[15px] font-bold leading-tight" style="color:var(--text);">XDAI</div>
-								<div class="text-[12px] font-medium" style="color:var(--text-muted);">xDAI</div>
+								<div class="text-[15px] font-bold leading-tight" style="color:var(--text);">sDAI</div>
+								<div class="text-[12px] font-medium" style="color:var(--text-muted);">Savings DAI</div>
 							</div>
 							<div class="text-right">
-								<div class="tnum text-[15px] font-bold" style="color:var(--text);">{(Number(xdaiBalance) / 1e18).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</div>
-								{#if marketPrices.XDAI}<div class="tnum text-[11.5px]" style="color:var(--text-dim);">≈€{((Number(xdaiBalance) / 1e18) * marketPrices.XDAI).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>{/if}
+								<div class="tnum text-[15px] font-bold" style="color:var(--text);">{(Number(sdaiBalance) / 1e18).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</div>
+								{#if marketPrices.SDAI}<div class="tnum text-[11.5px]" style="color:var(--text-dim);">≈€{((Number(sdaiBalance) / 1e18) * marketPrices.SDAI).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>{/if}
 							</div>
 						</button>
 					{/if}
@@ -434,7 +434,7 @@
 
 {#if marketAsset && address}
 	<AssetSheet
-		sym={marketAsset as 'BTC' | 'ETH' | 'GNO' | 'XDAI' | 'COW' | 'AAVE'}
+		sym={marketAsset as 'BTC' | 'ETH' | 'GNO' | 'SDAI' | 'COW' | 'AAVE'}
 		address={address}
 		eureBalance={assets.find(a => a.symbol === 'EURe')?.balance ?? 0n}
 		onClose={() => (marketAsset = null)}
