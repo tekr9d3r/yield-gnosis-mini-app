@@ -9,13 +9,16 @@
 	import { fetchTokenPrices } from '$lib/prices.js';
 	import { getATokenAddress, getATokenBalance } from '$lib/aave.js';
 	import type { AssetInfo } from '$lib/types.js';
+	import { WBTC_ADDRESS, WETH_ADDRESS, GNO_ADDRESS, ERC20_ABI, publicClient } from '$lib/chains.js';
 	import HeroCard      from '../components/HeroCard.svelte';
 	import PositionCard  from '../components/PositionCard.svelte';
 	import TokenLogo     from '../components/TokenLogo.svelte';
 	import WalletSheet   from '../components/WalletSheet.svelte';
-	import TipJar        from '../components/TipJar.svelte';
 	import YieldPotCard  from '../components/YieldPotCard.svelte';
 	import YieldPotSheet from '../components/YieldPotSheet.svelte';
+	import MarketsRow    from '../components/MarketsRow.svelte';
+	import AssetSheet    from '../components/AssetSheet.svelte';
+	import AboutSheet    from '../components/AboutSheet.svelte';
 
 	type Phase = 'idle' | 'loading' | 'ready';
 	let phase         = $state<Phase>('idle');
@@ -27,6 +30,12 @@
 	let walletOpen    = $state(false);
 	let yieldPotOpen  = $state(false);
 	let crcBalance    = $state(0);
+	let marketAsset   = $state<'BTC' | 'ETH' | 'GNO' | null>(null);
+	let aboutOpen     = $state(false);
+	let wbtcBalance   = $state(0n);
+	let wethBalance   = $state(0n);
+	let gnoBalance    = $state(0n);
+	let marketPrices  = $state<Record<string, number>>({});
 
 	// Circles identity
 	let profileName     = $state<string | undefined>(undefined);
@@ -106,6 +115,18 @@
 
 		assets = list;
 		phase  = 'ready';
+
+		// Fetch market token balances (non-blocking)
+		Promise.allSettled([
+			publicClient.readContract({ address: WBTC_ADDRESS, abi: ERC20_ABI, functionName: 'balanceOf', args: [addr] }),
+			publicClient.readContract({ address: WETH_ADDRESS, abi: ERC20_ABI, functionName: 'balanceOf', args: [addr] }),
+			publicClient.readContract({ address: GNO_ADDRESS,  abi: ERC20_ABI, functionName: 'balanceOf', args: [addr] }),
+		]).then(([w, e, g]) => {
+			if (id !== _loadId) return;
+			if (w.status === 'fulfilled') wbtcBalance = w.value as bigint;
+			if (e.status === 'fulfilled') wethBalance = e.value as bigint;
+			if (g.status === 'fulfilled') gnoBalance  = g.value as bigint;
+		});
 	}
 
 	onMount(() => {
@@ -250,6 +271,9 @@
 				{/each}
 			</div>
 
+			<!-- ── Markets row ── -->
+			<MarketsRow address={address} onOpen={(sym) => (marketAsset = sym as 'BTC' | 'ETH' | 'GNO')} onPrices={(p) => (marketPrices = p)} />
+
 			<!-- ── Wallet asset list ── -->
 			<div class="mb-4 px-4">
 				<div class="mb-2 flex justify-between px-1 text-[11.5px] font-black uppercase tracking-widest" style="color:var(--text-dim);">
@@ -291,6 +315,46 @@
 							</div>
 						</div>
 					{/if}
+					<!-- Market token holdings -->
+					{#if wbtcBalance > 0n}
+						<button class="flex w-full items-center px-4 py-3.5 text-left transition-all active:scale-[0.98]" style="border-top:var(--row-sep);" onclick={() => (marketAsset = 'BTC')}>
+							<div class="mr-3"><img src="/img/bitcoin.png" alt="BTC" width="36" height="36" class="rounded-full" /></div>
+							<div class="flex-1">
+								<div class="text-[15px] font-bold leading-tight" style="color:var(--text);">BTC</div>
+								<div class="text-[12px] font-medium" style="color:var(--text-muted);">Bitcoin</div>
+							</div>
+							<div class="text-right">
+								<div class="tnum text-[15px] font-bold" style="color:var(--text);">{(Number(wbtcBalance) / 1e8).toLocaleString('en-US', { minimumFractionDigits: 6, maximumFractionDigits: 8 })}</div>
+								{#if marketPrices.BTC}<div class="tnum text-[11.5px]" style="color:var(--text-dim);">≈€{((Number(wbtcBalance) / 1e8) * marketPrices.BTC).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>{/if}
+							</div>
+						</button>
+					{/if}
+					{#if wethBalance > 0n}
+						<button class="flex w-full items-center px-4 py-3.5 text-left transition-all active:scale-[0.98]" style="border-top:var(--row-sep);" onclick={() => (marketAsset = 'ETH')}>
+							<div class="mr-3"><img src="/img/ethereum.png" alt="ETH" width="36" height="36" class="rounded-full" /></div>
+							<div class="flex-1">
+								<div class="text-[15px] font-bold leading-tight" style="color:var(--text);">ETH</div>
+								<div class="text-[12px] font-medium" style="color:var(--text-muted);">Ethereum</div>
+							</div>
+							<div class="text-right">
+								<div class="tnum text-[15px] font-bold" style="color:var(--text);">{(Number(wethBalance) / 1e18).toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 6 })}</div>
+								{#if marketPrices.ETH}<div class="tnum text-[11.5px]" style="color:var(--text-dim);">≈€{((Number(wethBalance) / 1e18) * marketPrices.ETH).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>{/if}
+							</div>
+						</button>
+					{/if}
+					{#if gnoBalance > 0n}
+						<button class="flex w-full items-center px-4 py-3.5 text-left transition-all active:scale-[0.98]" style="border-top:var(--row-sep);" onclick={() => (marketAsset = 'GNO')}>
+							<div class="mr-3"><img src="/img/gnosis.png" alt="GNO" width="36" height="36" class="rounded-full" /></div>
+							<div class="flex-1">
+								<div class="text-[15px] font-bold leading-tight" style="color:var(--text);">GNO</div>
+								<div class="text-[12px] font-medium" style="color:var(--text-muted);">Gnosis</div>
+							</div>
+							<div class="text-right">
+								<div class="tnum text-[15px] font-bold" style="color:var(--text);">{(Number(gnoBalance) / 1e18).toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 6 })}</div>
+								{#if marketPrices.GNO}<div class="tnum text-[11.5px]" style="color:var(--text-dim);">≈€{((Number(gnoBalance) / 1e18) * marketPrices.GNO).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>{/if}
+							</div>
+						</button>
+					{/if}
 				</div>
 			</div>
 
@@ -299,30 +363,13 @@
 				<YieldPotCard address={address} onOpen={() => (yieldPotOpen = true)} />
 			</div>
 
-			<!-- ── Builder / tip footer ── -->
-			<div class="mx-4 mb-8 overflow-hidden rounded-[var(--r-lg)] p-4"
-				style="background:var(--card);border:var(--card-border);box-shadow:var(--shadow);">
-				<!-- Builder row -->
-				<div class="flex items-center gap-3">
-					<img src="/tekr0x-avatar.jpg" alt="Tekr0x.eth"
-						class="h-10 w-10 shrink-0 rounded-full object-cover"
-						style="border:2px solid var(--accent);" />
-					<div class="flex-1">
-						<p class="text-[15px] font-bold leading-tight" style="color:var(--text);">Tekr0x.eth</p>
-						<a href="https://x.com/tekr0x" target="_blank" rel="noopener noreferrer"
-							class="text-[12px] font-medium" style="color:var(--text-muted);">@tekr0x on X ↗</a>
-					</div>
-					<a href="https://app.gnosis.io/p/0x15BE89708053Cbc405F29095ECf803D51b5812C7"
-						target="_blank" rel="noopener noreferrer"
-						class="shrink-0 rounded-[var(--r-md)] px-3 py-2 text-[13px] font-bold text-white"
-						style="background:var(--accent);box-shadow:var(--accent-shadow);">
-						Join my circle ✦
-					</a>
-				</div>
-				<!-- Tip jar -->
-				<div class="mt-4 border-t pt-4" style="border-color:var(--border);">
-					<TipJar {address} />
-				</div>
+			<!-- ── About button ── -->
+			<div class="mb-8 flex justify-center px-4">
+				<button
+					onclick={() => (aboutOpen = true)}
+					class="rounded-full px-5 py-2 text-[13px] font-semibold transition-all active:scale-95"
+					style="background:var(--ghost-bg);color:var(--text-muted);border:var(--card-border);"
+				>About</button>
 			</div>
 		{/if}
 
@@ -331,6 +378,20 @@
 
 {#if yieldPotOpen && address}
 	<YieldPotSheet address={address} onClose={() => (yieldPotOpen = false)} />
+{/if}
+
+{#if aboutOpen && address}
+	<AboutSheet address={address} onClose={() => (aboutOpen = false)} />
+{/if}
+
+{#if marketAsset && address}
+	<AssetSheet
+		sym={marketAsset as 'BTC' | 'ETH' | 'GNO'}
+		address={address}
+		eureBalance={assets.find(a => a.symbol === 'EURe')?.balance ?? 0n}
+		onClose={() => (marketAsset = null)}
+		onDone={() => { marketAsset = null; loadData(address!); }}
+	/>
 {/if}
 
 {#if walletOpen && address}

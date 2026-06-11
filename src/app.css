@@ -35,6 +35,7 @@
 	--yield:      #11a152;
 	--yield-soft: color-mix(in srgb, #11a152 14%, transparent);
 	--apy-bg:     color-mix(in srgb, #11a152 9%, transparent);
+	--down:       #dc2740;
 
 	/* Radius */
 	--r-lg: 22px;

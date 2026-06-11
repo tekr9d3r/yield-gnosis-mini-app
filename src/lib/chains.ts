@@ -21,6 +21,8 @@ export const YIELDPOT_TREASURY = '0x5C36Ed9663742c791bE6eDB993847c306Cb8f4b3' as
 export const COW_SETTLEMENT    = '0x9008D19f58AAbD9eD0D60971565AA8510560ab41' as const;
 export const COW_VAULT_RELAYER = '0xC92E8bdf79f0507f65a392b0ab4667716BFE0110' as const;
 export const WBTC_ADDRESS      = '0x8e5bbbb09ed1ebde8674cda39a0c169401db4252' as const;
+export const WETH_ADDRESS      = '0x6A023CCd1ff6F2045C3309768eAd9E68F978f6e1' as const;
+export const GNO_ADDRESS       = '0x9C58BAcC331c9aa871AFD802DB6379a98e80CEdb' as const;
 
 const COW_SETTLEMENT_ABI = [{
 	name: 'setPreSignature',
