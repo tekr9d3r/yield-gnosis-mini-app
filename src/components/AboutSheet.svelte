@@ -8,22 +8,18 @@
 
 	const FEATURES = [
 		{
-			icon: '📈',
 			title: 'Earn yield',
 			desc: 'Deposit EURe or USDC.e into Aave v3 on Gnosis Chain and earn interest automatically.'
 		},
 		{
-			icon: '🎯',
 			title: 'Weekly YieldPot',
 			desc: 'All deposited yield goes into a shared pot. One contributor wins the full pot every week — no-loss lottery.'
 		},
 		{
-			icon: '🔄',
 			title: 'Invest',
 			desc: 'Buy and sell BTC, ETH, and GNO directly from your Circles wallet via CoW Swap — best price, MEV protected.'
 		},
 		{
-			icon: '🔐',
 			title: 'Passkey secured',
 			desc: 'Powered by Circles on Gnosis Chain. Your wallet is a Gnosis Safe secured by your device passkey — no seed phrase.'
 		},
@@ -64,12 +60,9 @@
 			<!-- Features -->
 			<div class="mb-5 flex flex-col gap-3">
 				{#each FEATURES as f}
-					<div class="flex items-start gap-3 rounded-[var(--r-md)] px-4 py-3" style="background:var(--inline-bg);">
-						<span class="mt-0.5 text-[20px] leading-none">{f.icon}</span>
-						<div>
-							<div class="text-[13.5px] font-bold" style="color:var(--text);">{f.title}</div>
-							<div class="mt-0.5 text-[12px] leading-relaxed" style="color:var(--text-muted);">{f.desc}</div>
-						</div>
+					<div class="rounded-[var(--r-md)] px-4 py-3" style="background:var(--inline-bg);">
+						<div class="text-[13.5px] font-bold" style="color:var(--text);">{f.title}</div>
+						<div class="mt-0.5 text-[12px] leading-relaxed" style="color:var(--text-muted);">{f.desc}</div>
 					</div>
 				{/each}
 			</div>
