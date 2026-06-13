@@ -12,12 +12,19 @@
 	const CIRCLES_RPC      = 'https://rpc.aboutcircles.com/';
 	const GNOSIS_GROUP_URL = 'https://app.gnosis.io/0xA7b485Eae7EC8793f29C1ebb268455705c5B67AF';
 
-	// Week 1 winner — image fetched via SDK same as member profiles
+	// Week 1 winner
 	const WINNER_ADDRESS     = '0x833304482EB6F0435B62b6B7cC67e5cF3e1F134b' as `0x${string}`;
 	const WINNER_PROFILE_URL = 'https://app.gnosis.io/0x833304482EB6F0435B62b6B7cC67e5cF3e1F134b';
 	const WINNER_TX_URL      = 'https://gnosis.blockscout.com/tx/0x1bc3d8cbd751fa76d3bdcf13ba1775a08cc4d446df76ed5e1f10517d37defd35';
 	let winnerName     = $state('Robinson');
 	let winnerImageUrl = $state<string | undefined>(undefined);
+
+	// Week 2 winner
+	const WINNER2_ADDRESS     = '0x662fc099fb7723b265a5d90be08467a33bab24ce' as `0x${string}`;
+	const WINNER2_PROFILE_URL = 'https://app.gnosis.io/0x662fc099fb7723b265a5d90be08467a33bab24ce';
+	const WINNER2_TX_URL      = 'https://gnosis.blockscout.com/tx/0xf267cbfb2c5e4d01413816bc8ee072d83840320e309f61d4ad37e141abdbc84a';
+	let winner2Name     = $state('');
+	let winner2ImageUrl = $state<string | undefined>(undefined);
 
 	// Week 2: starts June 7 2026 00:00 UTC, runs 7 days
 	const WEEK2_START_TS = 1780790400; // 2026-06-07 00:00:00 UTC
@@ -135,12 +142,19 @@
 
 		const sdk = getSdk();
 
-		// Fetch winner profile image
+		// Fetch winner profile images
 		sdk.rpc.profile.getProfileByAddress(WINNER_ADDRESS)
 			.then(p => {
 				if (!p) return;
 				if (p.name) winnerName = p.name;
 				winnerImageUrl = resolveImage(p.imageUrl ?? p.previewImageUrl ?? null);
+			})
+			.catch(() => {});
+		sdk.rpc.profile.getProfileByAddress(WINNER2_ADDRESS)
+			.then(p => {
+				if (!p) return;
+				if (p.name) winner2Name = p.name;
+				winner2ImageUrl = resolveImage(p.imageUrl ?? p.previewImageUrl ?? null);
 			})
 			.catch(() => {});
 
@@ -195,32 +209,63 @@
 			<span class="text-[20px] font-black" style="color:var(--text);letter-spacing:-0.02em;">Yield Pot</span>
 		</div>
 
-		<!-- ── Week 1 Winner ── -->
-		<div class="mx-4 mb-4 flex items-center gap-3 rounded-[var(--r-lg)] px-3.5 py-3"
-			style="background:var(--card);border:var(--card-border);box-shadow:var(--shadow);">
-			{#if winnerImageUrl}
-				<img src={winnerImageUrl} alt={winnerName}
-					class="h-9 w-9 shrink-0 rounded-full object-cover"
-					style="border:1.5px solid #f59e0b;" />
-			{:else}
-				<div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[11px] font-black text-white"
-					style="background:{addrGrad(WINNER_ADDRESS)};border:1.5px solid #f59e0b;">
-					{WINNER_ADDRESS.slice(2, 4).toUpperCase()}
+		<!-- ── Winners ── -->
+		<div class="mx-4 mb-2 flex flex-col gap-2">
+			<!-- Week 1 -->
+			<div class="flex items-center gap-3 rounded-[var(--r-lg)] px-3.5 py-3"
+				style="background:var(--card);border:var(--card-border);box-shadow:var(--shadow);">
+				{#if winnerImageUrl}
+					<img src={winnerImageUrl} alt={winnerName}
+						class="h-9 w-9 shrink-0 rounded-full object-cover"
+						style="border:1.5px solid #f59e0b;" />
+				{:else}
+					<div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[11px] font-black text-white"
+						style="background:{addrGrad(WINNER_ADDRESS)};border:1.5px solid #f59e0b;">
+						{WINNER_ADDRESS.slice(2, 4).toUpperCase()}
+					</div>
+				{/if}
+				<div class="min-w-0 flex-1">
+					<span class="text-[11px] font-black uppercase tracking-wider" style="color:#d97706;">Week 1</span>
+					<a href={WINNER_PROFILE_URL} target="_blank" rel="noopener noreferrer"
+						class="block text-[14px] font-bold leading-tight" style="color:var(--text);">
+						{winnerName} · 403.7 CRC ↗
+					</a>
 				</div>
-			{/if}
-			<div class="min-w-0 flex-1">
-				<div class="flex items-center gap-1.5">
-					<span class="text-[11px] font-black uppercase tracking-wider" style="color:#d97706;">🏆 Week 1</span>
-				</div>
-				<a href={WINNER_PROFILE_URL} target="_blank" rel="noopener noreferrer"
-					class="text-[14px] font-bold leading-tight" style="color:var(--text);">
-					{winnerName} · 403.7 CRC ↗
-				</a>
+				<a href={WINNER_TX_URL} target="_blank" rel="noopener noreferrer"
+					class="shrink-0 text-[12px] font-medium" style="color:var(--text-muted);">tx ↗</a>
 			</div>
-			<a href={WINNER_TX_URL} target="_blank" rel="noopener noreferrer"
-				class="shrink-0 text-[12px] font-medium" style="color:var(--text-muted);">
-				tx ↗
-			</a>
+			<!-- Week 2 -->
+			<div class="flex items-center gap-3 rounded-[var(--r-lg)] px-3.5 py-3"
+				style="background:var(--card);border:var(--card-border);box-shadow:var(--shadow);">
+				{#if winner2ImageUrl}
+					<img src={winner2ImageUrl} alt={winner2Name}
+						class="h-9 w-9 shrink-0 rounded-full object-cover"
+						style="border:1.5px solid #f59e0b;" />
+				{:else}
+					<div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[11px] font-black text-white"
+						style="background:{addrGrad(WINNER2_ADDRESS)};border:1.5px solid #f59e0b;">
+						{WINNER2_ADDRESS.slice(2, 4).toUpperCase()}
+					</div>
+				{/if}
+				<div class="min-w-0 flex-1">
+					<span class="text-[11px] font-black uppercase tracking-wider" style="color:#d97706;">Week 2</span>
+					<a href={WINNER2_PROFILE_URL} target="_blank" rel="noopener noreferrer"
+						class="block text-[14px] font-bold leading-tight" style="color:var(--text);">
+						{winner2Name || WINNER2_ADDRESS.slice(0,6) + '…' + WINNER2_ADDRESS.slice(-4)} · 13.0 CRC ↗
+					</a>
+				</div>
+				<a href={WINNER2_TX_URL} target="_blank" rel="noopener noreferrer"
+					class="shrink-0 text-[12px] font-medium" style="color:var(--text-muted);">tx ↗</a>
+			</div>
+		</div>
+
+		<!-- ── Paused notice ── -->
+		<div class="mx-4 mb-4 mt-2 rounded-[var(--r-lg)] px-4 py-3.5"
+			style="background:color-mix(in srgb,#f59e0b 10%,transparent);border:1px solid color-mix(in srgb,#f59e0b 30%,transparent);">
+			<p class="text-[13px] font-bold leading-snug" style="color:#d97706;">Yield Pot paused</p>
+			<p class="mt-1 text-[12.5px] leading-snug" style="color:var(--text-muted);">
+				The weekly draw is temporarily paused while we adapt to recent changes in how CRC are minted into groups. We are working on a solution and will resume as soon as possible.
+			</p>
 		</div>
 
 		<!-- ── Pot hero ── -->
