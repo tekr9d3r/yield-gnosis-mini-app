@@ -415,6 +415,19 @@ export function encodeBalancerSwap(
 	});
 }
 
+export const LBPSTARTER_ADDRESS = '0x5A3022551721095E9a01e97a2f91eA579947f42e' as const;
+
+export function encodeWithdrawLeftovers(destination: `0x${string}`): `0x${string}` {
+	return encodeFunctionData({
+		abi: [{
+			name: 'withdrawLeftovers', type: 'function', stateMutability: 'nonpayable',
+			inputs: [{ name: 'destination', type: 'address' }], outputs: []
+		}] as const,
+		functionName: 'withdrawLeftovers',
+		args: [destination]
+	});
+}
+
 const BALANCER_EXIT_ABI = [{
 	name: 'exitPool',
 	type: 'function',

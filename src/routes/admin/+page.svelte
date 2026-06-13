@@ -5,6 +5,7 @@
 		CIRCLES_HUB_V2, YIELDPOT_GROUP, YIELDPOT_TREASURY,
 		EURE_ADDRESS, USDC_E_ADDRESS, WBTC_ADDRESS,
 		BALANCER_VAULT, YIELDPOT_POOL_BPT, encodeExitPool,
+		LBPSTARTER_ADDRESS, encodeWithdrawLeftovers,
 		COW_SETTLEMENT, COW_VAULT_RELAYER,
 		encodeGroupMint, encodeTrust, encodeSetApprovalForAll,
 		getTreasuryNonce, computeSafeTxHash, encodeApproveHash,
@@ -124,6 +125,27 @@
 		} catch (e: unknown) {
 			transferErr   = e instanceof Error ? e.message : 'Transaction rejected';
 			transferState = 'error';
+		}
+	}
+
+	// LBPStarter withdraw leftovers state
+	let leftoverState = $state<'idle' | 'sending' | 'success' | 'error'>('idle');
+	let leftoverHash  = $state('');
+	let leftoverErr   = $state('');
+
+	async function withdrawLeftovers() {
+		if (!address || !isAdmin || leftoverState === 'sending') return;
+		leftoverState = 'sending'; leftoverErr = ''; leftoverHash = '';
+		try {
+			const result = await sendTransactions([{
+				to:   LBPSTARTER_ADDRESS,
+				data: encodeWithdrawLeftovers(address)
+			}]);
+			leftoverHash  = Array.isArray(result) ? result[0] : (result as { hash?: string })?.hash ?? '';
+			leftoverState = 'success';
+		} catch (e: unknown) {
+			leftoverErr   = e instanceof Error ? e.message : 'Transaction rejected';
+			leftoverState = 'error';
 		}
 	}
 
@@ -652,6 +674,40 @@
 				{/if}
 				{#if transferState === 'error' && transferErr}
 					<p class="mt-3 text-xs" style="color:#f87171;">{transferErr}</p>
+				{/if}
+			</div>
+
+			<!-- LBPStarter: Withdraw Leftovers -->
+			<div class="mb-4 rounded-lg p-5" style="background:#1c1c1c;border:1px solid #2a2a2a;">
+				<h2 class="mb-1 text-sm font-bold" style="color:#a78bfa;">Withdraw Stuck USDC.e</h2>
+				<p class="mb-3 text-xs" style="color:#6b7280;">
+					Recovers the 20 USDC.e stuck in the LBPStarter contract from the second deposit (which arrived after the pool was already created). Calls <code style="color:#a78bfa;">withdrawLeftovers(yourAddress)</code> — you are the CREATOR so this will succeed.
+				</p>
+				<div class="mb-4 rounded p-3" style="background:#111;border:1px solid #1e293b;">
+					<div class="flex justify-between text-xs">
+						<span style="color:#9ca3af;">LBPStarter contract</span>
+						<span class="font-mono" style="color:#6b7280;">{LBPSTARTER_ADDRESS.slice(0,8)}…{LBPSTARTER_ADDRESS.slice(-6)}</span>
+					</div>
+					<div class="mt-1 flex justify-between text-xs">
+						<span style="color:#9ca3af;">Recoverable</span>
+						<span style="color:#34d399;">~20 USDC.e</span>
+					</div>
+					<div class="mt-1 flex justify-between text-xs">
+						<span style="color:#9ca3af;">Recipient</span>
+						<span style="color:#6b7280;">your wallet</span>
+					</div>
+				</div>
+				<button
+					onclick={withdrawLeftovers}
+					disabled={leftoverState === 'sending' || leftoverState === 'success'}
+					class="w-full rounded py-2.5 text-sm font-bold disabled:opacity-50"
+					style="background:#14532d;color:#fff;"
+				>{leftoverState === 'sending' ? 'Withdrawing…' : 'Withdraw 20 USDC.e'}</button>
+				{#if leftoverState === 'success'}
+					<p class="mt-3 text-xs" style="color:#34d399;">✓ Withdrawn{leftoverHash ? ` · ${leftoverHash.slice(0, 10)}…` : ''}</p>
+				{/if}
+				{#if leftoverState === 'error' && leftoverErr}
+					<p class="mt-3 text-xs" style="color:#f87171;">{leftoverErr}</p>
 				{/if}
 			</div>
 
