@@ -26,8 +26,8 @@
 	let winner2Name     = $state('');
 	let winner2ImageUrl = $state<string | undefined>(undefined);
 
-	// Week 2: starts June 7 2026 00:00 UTC, runs 7 days
-	const WEEK2_START_TS = 1780790400; // 2026-06-07 00:00:00 UTC
+	// Week 3: paused — start set to future so list stays empty
+	const WEEK2_START_TS = 1782864000; // 2026-07-01 00:00:00 UTC (TBD)
 	const WEEK2_END_TS   = WEEK2_START_TS + 7 * 24 * 3600;
 
 	type ContributorRow  = { member: string; timestamp: number; amount: number };
@@ -58,7 +58,9 @@
 		return Math.min(1, Math.max(0, (now - WEEK2_START_TS) / (WEEK2_END_TS - WEEK2_START_TS)));
 	});
 	const timeLeft = $derived.by(() => {
-		const secsLeft = Math.max(0, WEEK2_END_TS - Date.now() / 1000);
+		const now = Date.now() / 1000;
+		if (now < WEEK2_START_TS) return '--';
+		const secsLeft = Math.max(0, WEEK2_END_TS - now);
 		const d = Math.floor(secsLeft / 86400);
 		const h = Math.floor((secsLeft % 86400) / 3600);
 		return `${d}d ${h}h`;
@@ -251,7 +253,7 @@
 					<span class="text-[11px] font-black uppercase tracking-wider" style="color:#d97706;">Week 2</span>
 					<a href={WINNER2_PROFILE_URL} target="_blank" rel="noopener noreferrer"
 						class="block text-[14px] font-bold leading-tight" style="color:var(--text);">
-						{winner2Name || WINNER2_ADDRESS.slice(0,6) + '…' + WINNER2_ADDRESS.slice(-4)} · 13.0 CRC ↗
+						{winner2Name || WINNER2_ADDRESS.slice(0,6) + '…' + WINNER2_ADDRESS.slice(-4)} · 128.5 CRC ↗
 					</a>
 				</div>
 				<a href={WINNER2_TX_URL} target="_blank" rel="noopener noreferrer"
