@@ -1,4 +1,4 @@
-import { createPublicClient, encodeFunctionData, encodePacked, fallback, hashTypedData, http } from 'viem';
+import { createPublicClient, encodeAbiParameters, encodeFunctionData, encodePacked, fallback, hashTypedData, http } from 'viem';
 import { gnosis } from 'viem/chains';
 
 export const publicClient = createPublicClient({
@@ -347,9 +347,10 @@ export function encodeCirclesTip(from: `0x${string}`, tokenId: bigint, staticAmo
 	});
 }
 
-export const BALANCER_VAULT    = '0xBA12222222228d8Ba445958a75a0704d566BF2C8' as const;
-export const SYIELDPOT_ADDRESS = '0x7b9f2c39eb73752d83a3cd2421a65e102e1919cd' as const;
-export const YIELDPOT_POOL_ID  = '0x6ab0a7cb5cc84420914f772200b921d57d6c7de00020000000000000000047a' as const;
+export const BALANCER_VAULT      = '0xBA12222222228d8Ba445958a75a0704d566BF2C8' as const;
+export const SYIELDPOT_ADDRESS   = '0x7b9f2c39eb73752d83a3cd2421a65e102e1919cd' as const;
+export const YIELDPOT_POOL_ID    = '0xe6ab0a7cb5cc84420914f772200b921d57d6c7de00020000000000000000047a' as const;
+export const YIELDPOT_POOL_BPT   = '0xe6ab0a7cb5cc84420914f772200b921d57d6c7de' as const;
 
 const BALANCER_VAULT_ABI = [
 	{
@@ -410,6 +411,50 @@ export function encodeBalancerSwap(
 			},
 			0n,
 			BigInt(Math.floor(Date.now() / 1000) + 3600)
+		]
+	});
+}
+
+const BALANCER_EXIT_ABI = [{
+	name: 'exitPool',
+	type: 'function',
+	stateMutability: 'nonpayable',
+	inputs: [
+		{ name: 'poolId',    type: 'bytes32'  },
+		{ name: 'sender',    type: 'address'  },
+		{ name: 'recipient', type: 'address'  },
+		{
+			name: 'request', type: 'tuple',
+			components: [
+				{ name: 'assets',           type: 'address[]' },
+				{ name: 'minAmountsOut',    type: 'uint256[]' },
+				{ name: 'userData',         type: 'bytes'     },
+				{ name: 'toInternalBalance',type: 'bool'      },
+			]
+		}
+	],
+	outputs: []
+}] as const;
+
+// Proportional exit: burns all BPT and returns USDC.e + s-YIELDPOT pro-rata
+export function encodeExitPool(sender: `0x${string}`, bptAmount: bigint): `0x${string}` {
+	const userData = encodeAbiParameters(
+		[{ type: 'uint256' }, { type: 'uint256' }],
+		[1n, bptAmount] // EXACT_BPT_IN_FOR_TOKENS_OUT = 1
+	);
+	return encodeFunctionData({
+		abi: BALANCER_EXIT_ABI,
+		functionName: 'exitPool',
+		args: [
+			YIELDPOT_POOL_ID,
+			sender,
+			sender,
+			{
+				assets:           [USDC_E_ADDRESS, SYIELDPOT_ADDRESS],
+				minAmountsOut:    [0n, 0n],
+				userData,
+				toInternalBalance: false
+			}
 		]
 	});
 }

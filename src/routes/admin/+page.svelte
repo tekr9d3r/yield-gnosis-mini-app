@@ -4,11 +4,13 @@
 	import {
 		CIRCLES_HUB_V2, YIELDPOT_GROUP, YIELDPOT_TREASURY,
 		EURE_ADDRESS, USDC_E_ADDRESS, WBTC_ADDRESS,
+		BALANCER_VAULT, YIELDPOT_POOL_BPT, encodeExitPool,
 		COW_SETTLEMENT, COW_VAULT_RELAYER,
 		encodeGroupMint, encodeTrust, encodeSetApprovalForAll,
 		getTreasuryNonce, computeSafeTxHash, encodeApproveHash,
 		encodeExecWithApprovedHash, encodeHubBatchTransfer,
 		encodeCoWPresign, hashCoWOrder, computeCoWOrderUid, encodeERC20Approve,
+		ERC20_ABI,
 		type CoWOrderFields,
 		publicClient
 	} from '$lib/chains.js';
@@ -122,6 +124,47 @@
 		} catch (e: unknown) {
 			transferErr   = e instanceof Error ? e.message : 'Transaction rejected';
 			transferState = 'error';
+		}
+	}
+
+	// Exit Balancer pool state
+	let exitBptBalance  = $state(0n);
+	let exitBptLoaded   = $state(false);
+	let exitState       = $state<'idle' | 'loading' | 'sending' | 'success' | 'error'>('idle');
+	let exitHash        = $state('');
+	let exitErr         = $state('');
+
+	async function loadExitBpt() {
+		if (!address) return;
+		exitState = 'loading';
+		try {
+			exitBptBalance = await publicClient.readContract({
+				address: YIELDPOT_POOL_BPT,
+				abi: ERC20_ABI,
+				functionName: 'balanceOf',
+				args: [address]
+			}) as bigint;
+			exitBptLoaded = true;
+			exitState = 'idle';
+		} catch (e: unknown) {
+			exitErr   = e instanceof Error ? e.message : 'Failed to read BPT balance';
+			exitState = 'error';
+		}
+	}
+
+	async function doExitPool() {
+		if (!address || !isAdmin || exitBptBalance === 0n || exitState === 'sending') return;
+		exitState = 'sending'; exitErr = ''; exitHash = '';
+		try {
+			const result = await sendTransactions([{
+				to:   BALANCER_VAULT,
+				data: encodeExitPool(address, exitBptBalance)
+			}]);
+			exitHash  = Array.isArray(result) ? result[0] : (result as { hash?: string })?.hash ?? '';
+			exitState = 'success';
+		} catch (e: unknown) {
+			exitErr   = e instanceof Error ? e.message : 'Transaction rejected';
+			exitState = 'error';
 		}
 	}
 
@@ -488,6 +531,59 @@
 				{/if}
 				{#if transferState === 'error' && transferErr}
 					<p class="mt-3 text-xs" style="color:#f87171;">{transferErr}</p>
+				{/if}
+			</div>
+
+			<!-- Exit Balancer Pool -->
+			<div class="mb-4 rounded-lg p-5" style="background:#1c1c1c;border:1px solid #2a2a2a;">
+				<h2 class="mb-1 text-sm font-bold" style="color:#a78bfa;">Exit Balancer Pool</h2>
+				<p class="mb-3 text-xs" style="color:#6b7280;">
+					Withdraws all liquidity from the YieldPot Balancer pool (USDC.e + s-YIELDPOT) back to your wallet by burning your BPT tokens.
+				</p>
+
+				<div class="mb-3">
+					<p class="mb-1 text-xs" style="color:#9ca3af;">Pool BPT</p>
+					<p class="break-all font-mono text-xs" style="color:#6b7280;">{YIELDPOT_POOL_BPT}</p>
+				</div>
+
+				{#if !exitBptLoaded}
+					<button
+						onclick={loadExitBpt}
+						disabled={exitState === 'loading'}
+						class="mb-4 w-full rounded py-2 text-xs font-bold disabled:opacity-50"
+						style="background:#1e293b;color:#94a3b8;border:1px solid #334155;"
+					>
+						{exitState === 'loading' ? 'Loading…' : 'Load BPT balance'}
+					</button>
+				{:else}
+					<div class="mb-4 rounded p-3" style="background:#111;border:1px solid #1e293b;">
+						<div class="flex justify-between text-xs">
+							<span style="color:#9ca3af;">Your BPT balance</span>
+							<span class="font-mono" style="color:#e5e5e5;">{(Number(exitBptBalance) / 1e18).toFixed(6)} BPT</span>
+						</div>
+						<div class="mt-1 flex justify-between text-xs">
+							<span style="color:#9ca3af;">Pool contains</span>
+							<span style="color:#6b7280;">~25 USDC.e + s-YIELDPOT dust</span>
+						</div>
+					</div>
+
+					<button
+						onclick={doExitPool}
+						disabled={exitState === 'sending' || exitBptBalance === 0n || exitState === 'success'}
+						class="w-full rounded py-2.5 text-sm font-bold disabled:opacity-50"
+						style="background:#92400e;color:#fff;"
+					>
+						{exitState === 'sending' ? 'Exiting…' : exitBptBalance === 0n ? 'No BPT to exit' : `Exit pool (${(Number(exitBptBalance) / 1e18).toFixed(4)} BPT)`}
+					</button>
+				{/if}
+
+				{#if exitState === 'success'}
+					<p class="mt-3 text-xs" style="color:#34d399;">
+						✓ Exited{exitHash ? ` · ${exitHash.slice(0, 10)}…` : ''}
+					</p>
+				{/if}
+				{#if exitState === 'error' && exitErr}
+					<p class="mt-3 text-xs" style="color:#f87171;">{exitErr}</p>
 				{/if}
 			</div>
 
