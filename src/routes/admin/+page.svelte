@@ -127,6 +127,58 @@
 		}
 	}
 
+	// xDAI transfer state
+	let xdaiBalance      = $state(0n);
+	let xdaiBalLoaded    = $state(false);
+	let xdaiRecipient    = $state('');
+	let xdaiAmount       = $state('');
+	let xdaiState        = $state<'idle' | 'loading' | 'sending' | 'success' | 'error'>('idle');
+	let xdaiHash         = $state('');
+	let xdaiErr          = $state('');
+
+	async function loadXdaiBalance() {
+		if (!address) return;
+		xdaiState = 'loading';
+		try {
+			xdaiBalance   = await publicClient.getBalance({ address });
+			xdaiBalLoaded = true;
+			xdaiState     = 'idle';
+		} catch (e: unknown) {
+			xdaiErr   = e instanceof Error ? e.message : 'Failed to read balance';
+			xdaiState = 'error';
+		}
+	}
+
+	async function sendXdai() {
+		if (!address || !isAdmin || xdaiState === 'sending') return;
+		const recipient = xdaiRecipient.trim() as `0x${string}`;
+		if (!recipient.startsWith('0x') || recipient.length !== 42) {
+			xdaiErr = 'Invalid recipient address'; xdaiState = 'error'; return;
+		}
+		const parsed = parseFloat(xdaiAmount);
+		if (!parsed || parsed <= 0) {
+			xdaiErr = 'Invalid amount'; xdaiState = 'error'; return;
+		}
+		const valueWei = BigInt(Math.floor(parsed * 1e18));
+		if (valueWei > xdaiBalance) {
+			xdaiErr = 'Amount exceeds balance'; xdaiState = 'error'; return;
+		}
+		xdaiState = 'sending'; xdaiErr = ''; xdaiHash = '';
+		try {
+			const result = await sendTransactions([{
+				to:    recipient,
+				data:  '0x',
+				value: valueWei.toString()
+			}]);
+			xdaiHash  = Array.isArray(result) ? result[0] : (result as { hash?: string })?.hash ?? '';
+			xdaiState = 'success';
+			xdaiBalance -= valueWei;
+		} catch (e: unknown) {
+			xdaiErr   = e instanceof Error ? e.message : 'Transaction rejected';
+			xdaiState = 'error';
+		}
+	}
+
 	// Exit Balancer pool state
 	let exitBptBalance  = $state(0n);
 	let exitBptLoaded   = $state(false);
@@ -432,6 +484,75 @@
 				{/if}
 				{#if trustState === 'error' && trustErr}
 					<p class="mt-3 text-xs" style="color:#f87171;">{trustErr}</p>
+				{/if}
+			</div>
+
+			<!-- xDAI Transfer -->
+			<div class="mb-4 rounded-lg p-5" style="background:#1c1c1c;border:1px solid #2a2a2a;">
+				<h2 class="mb-1 text-sm font-bold" style="color:#a78bfa;">Transfer xDAI</h2>
+				<p class="mb-3 text-xs" style="color:#6b7280;">Send native xDAI from your wallet to another address.</p>
+
+				{#if !xdaiBalLoaded}
+					<button
+						onclick={loadXdaiBalance}
+						disabled={xdaiState === 'loading'}
+						class="mb-4 w-full rounded py-2 text-xs font-bold disabled:opacity-50"
+						style="background:#1e293b;color:#94a3b8;border:1px solid #334155;"
+					>{xdaiState === 'loading' ? 'Loading…' : 'Load xDAI balance'}</button>
+				{:else}
+					<div class="mb-4 flex items-center justify-between rounded p-3" style="background:#111;border:1px solid #1e293b;">
+						<span class="text-xs" style="color:#9ca3af;">Balance</span>
+						<span class="font-mono text-xs" style="color:#e5e5e5;">{(Number(xdaiBalance) / 1e18).toFixed(6)} xDAI</span>
+					</div>
+				{/if}
+
+				<div class="mb-3">
+					<p class="mb-1 text-xs" style="color:#9ca3af;">Recipient</p>
+					<input
+						type="text"
+						placeholder="0x…"
+						bind:value={xdaiRecipient}
+						disabled={xdaiState === 'sending'}
+						class="w-full rounded px-3 py-2 text-xs disabled:opacity-50"
+						style="background:#111;border:1px solid #333;color:#e5e5e5;outline:none;"
+					/>
+				</div>
+
+				<div class="mb-4">
+					<p class="mb-1 text-xs" style="color:#9ca3af;">Amount (xDAI)</p>
+					<div class="flex gap-2">
+						<input
+							type="number"
+							min="0"
+							step="any"
+							placeholder="0.0"
+							bind:value={xdaiAmount}
+							disabled={xdaiState === 'sending'}
+							class="flex-1 rounded px-3 py-2 text-xs disabled:opacity-50"
+							style="background:#111;border:1px solid #333;color:#e5e5e5;outline:none;"
+						/>
+						{#if xdaiBalLoaded}
+							<button
+								onclick={() => { xdaiAmount = (Number(xdaiBalance) / 1e18).toFixed(6); }}
+								class="rounded px-3 py-1 text-xs font-bold"
+								style="background:#1e293b;color:#94a3b8;border:1px solid #334155;"
+							>MAX</button>
+						{/if}
+					</div>
+				</div>
+
+				<button
+					onclick={sendXdai}
+					disabled={xdaiState === 'sending' || xdaiState === 'success'}
+					class="w-full rounded py-2.5 text-sm font-bold disabled:opacity-50"
+					style="background:#064e3b;color:#fff;"
+				>{xdaiState === 'sending' ? 'Sending…' : 'Send xDAI'}</button>
+
+				{#if xdaiState === 'success'}
+					<p class="mt-3 text-xs" style="color:#34d399;">✓ Sent{xdaiHash ? ` · ${xdaiHash.slice(0, 10)}…` : ''}</p>
+				{/if}
+				{#if xdaiState === 'error' && xdaiErr}
+					<p class="mt-3 text-xs" style="color:#f87171;">{xdaiErr}</p>
 				{/if}
 			</div>
 
