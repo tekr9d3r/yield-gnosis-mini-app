@@ -141,7 +141,7 @@
 	onMount(() => {
 		inMiniapp = isMiniappMode();
 		if (!inMiniapp) {
-			window.location.replace('https://circles.gnosis.io');
+			window.location.replace('https://circles.gnosis.io/playground?url=https%3A%2F%2Fyield-gnosis-mini-app.vercel.app%2F');
 			return;
 		}
 		if (inMiniapp) {
