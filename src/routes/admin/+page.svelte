@@ -128,6 +128,48 @@
 		}
 	}
 
+	// Treasury contributors state
+	type Contributor = { address: string; amount: number; lastTs: number };
+	let contributors      = $state<Contributor[]>([]);
+	let contribLoaded     = $state(false);
+	let contribState      = $state<'idle' | 'loading' | 'error'>('idle');
+	let contribErr        = $state('');
+	let contribTotal      = $state(0);
+
+	async function loadContributors() {
+		contribState = 'loading'; contribErr = '';
+		try {
+			const BASE = `https://gnosis.blockscout.com/api/v2/addresses/${YIELDPOT_TREASURY}/token-transfers?type=ERC-1155&filter=to`;
+			const agg = new Map<string, { amount: bigint; lastTs: number }>();
+			let next: string | null = BASE;
+			while (next) {
+				const r = await fetch(next);
+				if (!r.ok) throw new Error(`Blockscout ${r.status}`);
+				const d = await r.json();
+				for (const item of (d.items ?? [])) {
+					const addr = (item.from?.hash ?? '').toLowerCase();
+					if (!addr || addr === '0x0000000000000000000000000000000000000000') continue;
+					const ts  = Math.floor(new Date(item.timestamp).getTime() / 1000);
+					const val = BigInt(item.total?.value ?? '0');
+					const prev = agg.get(addr);
+					agg.set(addr, { amount: (prev?.amount ?? 0n) + val, lastTs: Math.max(ts, prev?.lastTs ?? 0) });
+				}
+				next = d.next_page_params
+					? BASE + '&' + new URLSearchParams(d.next_page_params).toString()
+					: null;
+			}
+			contributors = Array.from(agg.entries())
+				.map(([address, { amount, lastTs }]) => ({ address, amount: Number(amount) / 1e18, lastTs }))
+				.sort((a, b) => b.amount - a.amount);
+			contribTotal  = contributors.reduce((s, c) => s + c.amount, 0);
+			contribLoaded = true;
+			contribState  = 'idle';
+		} catch (e: unknown) {
+			contribErr   = e instanceof Error ? e.message : 'Failed to load';
+			contribState = 'error';
+		}
+	}
+
 	// LBPStarter withdraw leftovers state
 	let leftoverState = $state<'idle' | 'sending' | 'success' | 'error'>('idle');
 	let leftoverHash  = $state('');
@@ -464,6 +506,67 @@
 
 		{:else}
 			<p class="mb-6 text-xs" style="color:#6b7280;">Connected: {address}</p>
+
+			<!-- Treasury Contributors -->
+			<div class="mb-4 rounded-lg p-5" style="background:#1c1c1c;border:1px solid #2a2a2a;">
+				<h2 class="mb-1 text-sm font-bold" style="color:#a78bfa;">YieldPot Contributors</h2>
+				<p class="mb-3 text-xs" style="color:#6b7280;">All-time ERC-1155 mints received by the treasury. Paginate through the full Blockscout history.</p>
+
+				{#if !contribLoaded}
+					<button
+						onclick={loadContributors}
+						disabled={contribState === 'loading'}
+						class="w-full rounded py-2 text-xs font-bold disabled:opacity-50"
+						style="background:#1e293b;color:#94a3b8;border:1px solid #334155;"
+					>{contribState === 'loading' ? 'Loading all pages…' : 'Load contributors'}</button>
+				{:else}
+					<!-- Summary row -->
+					<div class="mb-3 flex gap-2">
+						<div class="flex-1 rounded p-2.5 text-center" style="background:#111;border:1px solid #1e293b;">
+							<div class="text-sm font-black" style="color:#a78bfa;">{contributors.length}</div>
+							<div class="text-[10px] uppercase tracking-wider" style="color:#6b7280;">Addresses</div>
+						</div>
+						<div class="flex-1 rounded p-2.5 text-center" style="background:#111;border:1px solid #1e293b;">
+							<div class="text-sm font-black" style="color:#34d399;">{contribTotal.toFixed(1)}</div>
+							<div class="text-[10px] uppercase tracking-wider" style="color:#6b7280;">Total CRC</div>
+						</div>
+					</div>
+
+					<!-- Contributor list -->
+					{#if contributors.length === 0}
+						<p class="text-center text-xs" style="color:#4b5563;">No contributions found.</p>
+					{:else}
+						<div class="rounded" style="border:1px solid #1e293b;overflow:hidden;">
+							{#each contributors as c, i}
+								<div class="flex items-center gap-3 px-3 py-2.5"
+									style="border-top:{i ? '1px solid #1a1a1a' : 'none'};background:{i % 2 === 0 ? '#111' : '#0d0d0d'};">
+									<span class="w-5 shrink-0 text-center text-[11px] font-black"
+										style="color:{i < 3 ? '#a78bfa' : '#4b5563'};">{i + 1}</span>
+									<span class="flex-1 font-mono text-[11px]" style="color:#9ca3af;">
+										{c.address.slice(0, 8)}…{c.address.slice(-6)}
+									</span>
+									<span class="text-right text-[12px] font-bold" style="color:#e5e5e5;">
+										{c.amount < 0.01 ? '<0.01' : c.amount.toLocaleString('en', { maximumFractionDigits: 2 })}
+										<span class="text-[10px] font-normal" style="color:#4b5563;"> CRC</span>
+									</span>
+									<span class="shrink-0 text-[10px]" style="color:#374151;">
+										{new Date(c.lastTs * 1000).toLocaleDateString('en', { month: 'short', day: 'numeric' })}
+									</span>
+								</div>
+							{/each}
+						</div>
+						<button
+							onclick={loadContributors}
+							class="mt-3 w-full rounded py-1.5 text-[11px] font-bold"
+							style="background:#111;color:#6b7280;border:1px solid #1e293b;"
+						>Refresh</button>
+					{/if}
+				{/if}
+
+				{#if contribState === 'error'}
+					<p class="mt-2 text-xs" style="color:#f87171;">{contribErr}</p>
+				{/if}
+			</div>
 
 			<!-- Trust section -->
 			<div class="mb-4 rounded-lg p-5" style="background:#1c1c1c;border:1px solid #2a2a2a;">
