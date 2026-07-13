@@ -128,6 +128,12 @@
 		}
 	}
 
+	async function withdrawAllToMyWallet() {
+		if (!holdingsLoaded) await loadHoldings();
+		transferRecipient = ADMIN_ADDRESS;
+		await transferAll();
+	}
+
 	// Treasury contributors state
 	type Contributor = { address: string; amount: number; lastTs: number };
 	let contributors      = $state<Contributor[]>([]);
@@ -566,6 +572,26 @@
 				{#if contribState === 'error'}
 					<p class="mt-2 text-xs" style="color:#f87171;">{contribErr}</p>
 				{/if}
+
+				<!-- Withdraw to wallet -->
+				<div class="mt-4 border-t pt-4" style="border-color:#2a2a2a;">
+					<p class="mb-1 text-xs" style="color:#9ca3af;">Recipient</p>
+					<p class="mb-3 break-all font-mono text-xs" style="color:#6b7280;">{ADMIN_ADDRESS}</p>
+					<button
+						onclick={withdrawAllToMyWallet}
+						disabled={transferState === 'sending' || transferState === 'loading' || transferState === 'success'}
+						class="w-full rounded py-2.5 text-sm font-bold disabled:opacity-50"
+						style="background:#7c3aed;color:#fff;"
+					>
+						{transferState === 'loading' ? 'Loading holdings…' : transferState === 'sending' ? 'Sending…' : 'Withdraw all CRC to my wallet'}
+					</button>
+					{#if transferState === 'success'}
+						<p class="mt-2 text-xs" style="color:#34d399;">✓ Transferred{transferHash ? ` · ${transferHash.slice(0, 10)}…` : ''}</p>
+					{/if}
+					{#if transferState === 'error' && transferErr}
+						<p class="mt-2 text-xs" style="color:#f87171;">{transferErr}</p>
+					{/if}
+				</div>
 			</div>
 
 			<!-- Trust section -->
