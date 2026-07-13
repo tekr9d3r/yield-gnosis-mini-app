@@ -415,6 +415,23 @@ export function encodeBalancerSwap(
 	});
 }
 
+// Wrap ERC-1155 YIELDPOT_GROUP CRC → s-YIELDPOT ERC-20 (type 1 = Inflationary)
+export function encodeHubWrap(avatar: `0x${string}`, amount: bigint): `0x${string}` {
+	return encodeFunctionData({
+		abi: [{
+			name: 'wrap', type: 'function', stateMutability: 'nonpayable',
+			inputs: [
+				{ name: '_avatar', type: 'address' },
+				{ name: '_amount', type: 'uint256' },
+				{ name: '_type',   type: 'uint8'   }
+			],
+			outputs: [{ name: '', type: 'address' }]
+		}] as const,
+		functionName: 'wrap',
+		args: [avatar, amount, 1]
+	});
+}
+
 export const LBPSTARTER_ADDRESS = '0x5A3022551721095E9a01e97a2f91eA579947f42e' as const;
 
 export function encodeWithdrawLeftovers(destination: `0x${string}`): `0x${string}` {

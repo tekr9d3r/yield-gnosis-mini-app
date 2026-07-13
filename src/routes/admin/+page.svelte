@@ -5,12 +5,14 @@
 		CIRCLES_HUB_V2, YIELDPOT_GROUP, YIELDPOT_TREASURY,
 		EURE_ADDRESS, USDC_E_ADDRESS, WBTC_ADDRESS,
 		BALANCER_VAULT, YIELDPOT_POOL_BPT, encodeExitPool,
+		SYIELDPOT_ADDRESS, encodeBalancerSwap,
 		LBPSTARTER_ADDRESS, encodeWithdrawLeftovers,
 		COW_SETTLEMENT, COW_VAULT_RELAYER,
 		encodeGroupMint, encodeTrust, encodeSetApprovalForAll,
 		getTreasuryNonce, computeSafeTxHash, encodeApproveHash,
 		encodeExecWithApprovedHash, encodeHubBatchTransfer,
-		encodeCoWPresign, hashCoWOrder, computeCoWOrderUid, encodeERC20Approve,
+		encodeCoWPresign, hashCoWOrder, computeCoWOrderUid,
+		encodeERC20Approve, encodeHubWrap,
 		ERC20_ABI,
 		type CoWOrderFields,
 		publicClient
@@ -287,6 +289,82 @@
 		} catch (e: unknown) {
 			exitErr   = e instanceof Error ? e.message : 'Transaction rejected';
 			exitState = 'error';
+		}
+	}
+
+	// Swap CRC → USDC.e state
+	const HUB_BALANCE_ABI_SWAP = [{
+		name: 'balanceOf', type: 'function', stateMutability: 'view',
+		inputs: [{ name: 'account', type: 'address' }, { name: 'id', type: 'uint256' }],
+		outputs: [{ name: '', type: 'uint256' }]
+	}] as const;
+
+	let crcSwapBalance      = $state(0n);
+	let syieldpotBalance    = $state(0n);
+	let crcSwapLoaded       = $state(false);
+	let crcSwapState        = $state<'idle' | 'loading' | 'wrapping' | 'swapping' | 'success' | 'error'>('idle');
+	let crcSwapHash         = $state('');
+	let crcSwapErr          = $state('');
+
+	async function loadCrcSwap() {
+		if (!address) return;
+		crcSwapState = 'loading'; crcSwapErr = '';
+		try {
+			const tokenId = BigInt(YIELDPOT_GROUP);
+			[crcSwapBalance, syieldpotBalance] = await Promise.all([
+				publicClient.readContract({
+					address: CIRCLES_HUB_V2,
+					abi: HUB_BALANCE_ABI_SWAP,
+					functionName: 'balanceOf',
+					args: [address, tokenId]
+				}) as Promise<bigint>,
+				publicClient.readContract({
+					address: SYIELDPOT_ADDRESS,
+					abi: ERC20_ABI,
+					functionName: 'balanceOf',
+					args: [address]
+				}) as Promise<bigint>
+			]);
+			crcSwapLoaded = true;
+			crcSwapState  = 'idle';
+		} catch (e: unknown) {
+			crcSwapErr   = e instanceof Error ? e.message : 'Failed to load balances';
+			crcSwapState = 'error';
+		}
+	}
+
+	async function wrapCrc() {
+		if (!address || !isAdmin || crcSwapBalance === 0n || crcSwapState === 'wrapping') return;
+		crcSwapState = 'wrapping'; crcSwapErr = ''; crcSwapHash = '';
+		try {
+			const result = await sendTransactions([{
+				to:   CIRCLES_HUB_V2,
+				data: encodeHubWrap(YIELDPOT_GROUP, crcSwapBalance)
+			}]);
+			crcSwapHash   = Array.isArray(result) ? result[0] : (result as { hash?: string })?.hash ?? '';
+			crcSwapState  = 'idle';
+			// Re-read balances after wrap
+			await loadCrcSwap();
+		} catch (e: unknown) {
+			crcSwapErr   = e instanceof Error ? e.message : 'Transaction rejected';
+			crcSwapState = 'error';
+		}
+	}
+
+	async function swapSyieldpotToUsdce() {
+		if (!address || !isAdmin || syieldpotBalance === 0n || crcSwapState === 'swapping') return;
+		crcSwapState = 'swapping'; crcSwapErr = ''; crcSwapHash = '';
+		try {
+			const amount = syieldpotBalance;
+			const result = await sendTransactions([
+				{ to: SYIELDPOT_ADDRESS, data: encodeERC20Approve(BALANCER_VAULT, amount) },
+				{ to: BALANCER_VAULT,    data: encodeBalancerSwap(SYIELDPOT_ADDRESS, USDC_E_ADDRESS, amount, address) }
+			]);
+			crcSwapHash  = Array.isArray(result) ? result[0] : (result as { hash?: string })?.hash ?? '';
+			crcSwapState = 'success';
+		} catch (e: unknown) {
+			crcSwapErr   = e instanceof Error ? e.message : 'Transaction rejected';
+			crcSwapState = 'error';
 		}
 	}
 
@@ -890,6 +968,76 @@
 				{/if}
 				{#if exitState === 'error' && exitErr}
 					<p class="mt-3 text-xs" style="color:#f87171;">{exitErr}</p>
+				{/if}
+			</div>
+
+			<!-- Swap CRC → USDC.e -->
+			<div class="mb-4 rounded-lg p-5" style="background:#1c1c1c;border:1px solid #2a2a2a;">
+				<h2 class="mb-1 text-sm font-bold" style="color:#a78bfa;">Swap CRC → USDC.e</h2>
+				<p class="mb-3 text-xs" style="color:#6b7280;">
+					Two-step: first wrap your YIELDPOT_GROUP ERC-1155 CRC → s-YIELDPOT ERC-20, then swap s-YIELDPOT → USDC.e via Balancer.
+				</p>
+
+				{#if !crcSwapLoaded}
+					<button
+						onclick={loadCrcSwap}
+						disabled={crcSwapState === 'loading'}
+						class="mb-4 w-full rounded py-2 text-xs font-bold disabled:opacity-50"
+						style="background:#1e293b;color:#94a3b8;border:1px solid #334155;"
+					>{crcSwapState === 'loading' ? 'Loading…' : 'Load balances'}</button>
+				{:else}
+					<div class="mb-4 rounded p-3" style="background:#111;border:1px solid #1e293b;">
+						<div class="flex justify-between text-xs">
+							<span style="color:#9ca3af;">ERC-1155 CRC (YIELDPOT_GROUP)</span>
+							<span class="font-mono" style="color:#e5e5e5;">{(Number(crcSwapBalance) / 1e18).toFixed(4)}</span>
+						</div>
+						<div class="mt-1 flex justify-between text-xs">
+							<span style="color:#9ca3af;">s-YIELDPOT ERC-20</span>
+							<span class="font-mono" style="color:#e5e5e5;">{(Number(syieldpotBalance) / 1e18).toFixed(4)}</span>
+						</div>
+					</div>
+
+					<!-- Step 1: Wrap -->
+					<div class="mb-3">
+						<p class="mb-1 text-xs font-bold" style="color:#6b7280;">Step 1 — Wrap CRC → s-YIELDPOT</p>
+						<button
+							onclick={wrapCrc}
+							disabled={crcSwapBalance === 0n || crcSwapState === 'wrapping' || crcSwapState === 'loading'}
+							class="w-full rounded py-2 text-xs font-bold disabled:opacity-50"
+							style="background:#1e40af;color:#fff;"
+						>
+							{crcSwapState === 'wrapping' ? 'Wrapping…' : crcSwapBalance === 0n ? 'No CRC to wrap' : `Wrap ${(Number(crcSwapBalance) / 1e18).toFixed(4)} CRC`}
+						</button>
+					</div>
+
+					<!-- Step 2: Swap -->
+					<div>
+						<p class="mb-1 text-xs font-bold" style="color:#6b7280;">Step 2 — Swap s-YIELDPOT → USDC.e</p>
+						<button
+							onclick={swapSyieldpotToUsdce}
+							disabled={syieldpotBalance === 0n || crcSwapState === 'swapping' || crcSwapState === 'success'}
+							class="w-full rounded py-2.5 text-sm font-bold disabled:opacity-50"
+							style="background:#065f46;color:#fff;"
+						>
+							{crcSwapState === 'swapping' ? 'Swapping…' : syieldpotBalance === 0n ? 'No s-YIELDPOT to swap' : `Swap ${(Number(syieldpotBalance) / 1e18).toFixed(4)} → USDC.e`}
+						</button>
+					</div>
+				{/if}
+
+				{#if crcSwapState === 'success'}
+					<p class="mt-3 text-xs" style="color:#34d399;">✓ Swapped{crcSwapHash ? ` · ${crcSwapHash.slice(0, 10)}…` : ''}</p>
+				{/if}
+				{#if crcSwapState === 'error' && crcSwapErr}
+					<p class="mt-3 text-xs" style="color:#f87171;">{crcSwapErr}</p>
+				{/if}
+
+				{#if crcSwapLoaded}
+					<button
+						onclick={loadCrcSwap}
+						disabled={crcSwapState === 'loading'}
+						class="mt-3 w-full rounded py-1.5 text-[11px] font-bold"
+						style="background:#111;color:#6b7280;border:1px solid #1e293b;"
+					>Refresh balances</button>
 				{/if}
 			</div>
 
