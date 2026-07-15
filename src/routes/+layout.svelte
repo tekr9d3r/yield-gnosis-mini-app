@@ -1,9 +1,9 @@
 <script lang="ts">
 	import '../app.css';
-	import { inject } from '@vercel/analytics';
-	import { onMount } from 'svelte';
+	import { dev } from '$app/environment';
+	import { injectAnalytics } from '@vercel/analytics/sveltekit';
 	let { children } = $props();
-	onMount(() => inject());
+	injectAnalytics({ mode: dev ? 'development' : 'production' });
 </script>
 
 {@render children()}
