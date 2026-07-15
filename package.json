@@ -26,6 +26,7 @@
 	"dependencies": {
 		"@aboutcircles/miniapp-sdk": "^0.1.44",
 		"@aboutcircles/sdk": "^0.1.32",
+		"@vercel/analytics": "^2.0.1",
 		"viem": "^2.31.0"
 	}
 }
